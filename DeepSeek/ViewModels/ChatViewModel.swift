@@ -88,6 +88,175 @@ class ChatViewModel: ObservableObject {
         thinkingTimer = nil
     }
     
+    // 新增：触发对话记忆优化
+    func optimizeConversationMemory() {
+        guard let conversation = currentConversation, conversation.messages.count > 10 else {
+            print("📝 对话记忆优化：消息不足，跳过优化")
+            return // 消息太少，不需要优化
+        }
+        
+        // 分析所有消息的重要性
+        analyzeMessageImportance(for: conversation)
+        
+        // 根据消息数量决定是否生成摘要
+        if conversation.messages.count > 20 && conversation.summaries.isEmpty {
+            // 为前20条消息生成摘要
+            generateSummary(for: conversation, range: 0...19)
+        } else if conversation.messages.count > 30 && conversation.summaries.count == 1 {
+            // 为新增的消息生成新摘要
+            let lastSummaryEnd = conversation.summaries.last?.messageRange.upperBound ?? 0
+            if conversation.messages.count - lastSummaryEnd > 20 {
+                generateSummary(for: conversation, range: lastSummaryEnd...(conversation.messages.count - 1))
+            }
+        }
+        
+        // 提取对话主题
+        if conversation.topics.isEmpty && conversation.messages.count >= 5 {
+            extractConversationTopics(for: conversation)
+        }
+    }
+    
+    // 新增：分析消息重要性
+    private func analyzeMessageImportance(for conversation: Conversation) {
+        guard var mutableConversation = currentConversation else { return }
+        
+        // 获取未分析重要性的消息（只处理importance为0的消息）
+        let messagesToAnalyze = mutableConversation.messages.enumerated().filter { $0.element.importance == 0 }
+        
+        guard !messagesToAnalyze.isEmpty else {
+            print("📝 重要性分析：没有需要分析的消息")
+            return
+        }
+        
+        print("📝 开始分析消息重要性，共\(messagesToAnalyze.count)条消息")
+        
+        // 为每条消息进行重要性分析（这里可以优化为批量分析）
+        for (index, message) in messagesToAnalyze {
+            // 过滤掉短消息，默认不重要
+            if message.content.count < 10 {
+                mutableConversation.messages[index].importance = 2
+                continue
+            }
+            
+            apiService.analyzeImportance(message: message)
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            print("❌ 消息重要性分析失败: \(error.localizedDescription)")
+                        }
+                    },
+                    receiveValue: { [weak self] importance in
+                        guard let self = self else { return }
+                        
+                        print("📝 消息重要性分析结果: \(importance)")
+                        
+                        // 更新消息重要性
+                        if var conversation = self.currentConversation, 
+                           index < conversation.messages.count {
+                            conversation.messages[index].importance = importance
+                            self.currentConversation = conversation
+                            
+                            // 只有当分析了所有消息后才保存对话
+                            if !conversation.messages.contains(where: { $0.importance == 0 }) {
+                                self.updateConversation(conversation)
+                                print("📝 所有消息重要性分析完成，已保存对话")
+                            }
+                        }
+                    }
+                )
+                .store(in: &cancellables)
+        }
+    }
+    
+    // 新增：生成对话摘要
+    private func generateSummary(for conversation: Conversation, range: ClosedRange<Int>) {
+        print("📝 开始生成对话摘要，消息范围: \(range)")
+        
+        apiService.generateSummary(for: conversation.messages, range: range)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("❌ 摘要生成失败: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { [weak self] summary in
+                    guard let self = self else { return }
+                    
+                    print("📝 成功生成摘要: \(summary.content.prefix(30))...")
+                    
+                    // 更新对话摘要
+                    if var conversation = self.currentConversation {
+                        conversation.summaries.append(summary)
+                        
+                        // 如果摘要策略是默认的，切换到摘要上下文策略
+                        if conversation.contextStrategy == .recentMessages {
+                            conversation.contextStrategy = .summarizedContext
+                            print("📝 已切换到摘要上下文策略")
+                        }
+                        
+                        self.currentConversation = conversation
+                        self.updateConversation(conversation)
+                    }
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    // 新增：提取对话主题
+    private func extractConversationTopics(for conversation: Conversation) {
+        print("📝 开始提取对话主题")
+        
+        // 构建用于主题提取的提示
+        let topicsPrompt = """
+        请从以下对话中提取3-5个主题标签，以逗号分隔。只返回主题标签列表，不要有其他内容。
+        
+        \(conversation.messages.prefix(min(10, conversation.messages.count)).map { 
+            ($0.isUser ? "用户: " : "AI: ") + $0.content 
+        }.joined(separator: "\n\n"))
+        
+        主题标签:
+        """
+        
+        // 创建一个临时消息用于API请求
+        let tempMessage = Message(content: topicsPrompt, isUser: true, isContextual: false)
+        
+        apiService.extractKeywords(message: tempMessage)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("❌ 主题提取失败: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { [weak self] topics in
+                    guard let self = self else { return }
+                    
+                    print("📝 成功提取主题: \(topics.joined(separator: ", "))")
+                    
+                    // 更新对话主题
+                    if var conversation = self.currentConversation {
+                        conversation.topics = topics
+                        self.currentConversation = conversation
+                        self.updateConversation(conversation)
+                    }
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    // 新增：更改上下文策略
+    func changeContextStrategy(_ strategy: ContextStrategy) {
+        if var conversation = currentConversation {
+            conversation.contextStrategy = strategy
+            print("📝 切换上下文策略: \(strategy.rawValue)")
+            currentConversation = conversation
+            updateConversation(conversation)
+        }
+    }
+    
+    // 修改：发送消息方法，使用对话上下文
     func sendMessage(_ content: String) {
         print("📱 用户发送消息: \(content)")
         
@@ -117,8 +286,8 @@ class ChatViewModel: ObservableObject {
         
         print("🤖 开始请求AI响应...")
         
-        // 调用API获取流式响应
-        apiService.sendStreamMessage(currentMessages)
+        // 调用API获取流式响应，传入当前对话以使用记忆功能
+        apiService.sendStreamMessage(currentMessages, conversation: currentConversation)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -164,6 +333,16 @@ class ChatViewModel: ObservableObject {
                                         self.currentConversation = conversation
                                     }
                                     self.updateConversation(conversation)
+                                    
+                                    // 如果对话消息达到一定数量，触发记忆优化
+                                    if conversation.messages.count >= 10 {
+                                        // 使用异步队列执行，避免阻塞主线程
+                                        DispatchQueue.global(qos: .background).async {
+                                            DispatchQueue.main.async {
+                                                self.optimizeConversationMemory()
+                                            }
+                                        }
+                                    }
                                 }
                             } else {
                                 // 如果没有找到最后一条AI消息，创建一个新的

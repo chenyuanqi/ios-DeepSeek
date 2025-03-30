@@ -241,7 +241,7 @@ class APIService {
     }
     
     // 流式请求，也使用自定义session
-    func sendStreamMessage(_ messages: [Message]) -> AnyPublisher<String, APIError> {
+    func sendStreamMessage(_ messages: [Message], conversation: Conversation? = nil) -> AnyPublisher<String, APIError> {
         guard let url = URL(string: baseURL) else {
             print("❌ API错误: URL无效")
             return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
@@ -249,10 +249,28 @@ class APIService {
         
         // 记录请求开始
         print("📤 开始发送请求 - 模型: \(currentModel.displayName)")
-        print("📤 消息数量: \(messages.count)条 - 最后一条: \(messages.last?.content.prefix(30) ?? "")...")
+        
+        // 决定使用哪些消息作为上下文
+        var contextMessages: [Message]
+        
+        if let conversation = conversation {
+            // 使用对话的上下文策略获取记忆消息
+            contextMessages = conversation.getContextMessages()
+            print("📤 使用记忆策略: \(conversation.contextStrategy.rawValue)")
+            print("📤 上下文消息: \(contextMessages.count)条")
+        } else {
+            // 如果没有提供对话，使用传入的全部消息
+            contextMessages = messages
+            print("📤 使用全部消息作为上下文: \(messages.count)条")
+        }
+        
+        // 打印最后一条用户消息
+        if let lastUserMessage = contextMessages.last(where: { $0.isUser }) {
+            print("📤 最后一条用户消息: \(lastUserMessage.content.prefix(30))...")
+        }
         
         // 将Message转换为ChatMessage格式
-        let chatMessages = messages.map { message in
+        let chatMessages = contextMessages.map { message in
             ChatMessage(
                 role: message.isUser ? "user" : "assistant",
                 content: message.content
@@ -314,6 +332,281 @@ class APIService {
             .mapError { error in
                 print("❌ API错误: \(error.localizedDescription)")
                 return APIError.requestFailed(error)
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // 新增：生成对话摘要
+    func generateSummary(for messages: [Message], range: ClosedRange<Int>) -> AnyPublisher<ConversationSummary, APIError> {
+        guard let url = URL(string: baseURL) else {
+            print("❌ API错误: URL无效")
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        }
+        
+        // 只选取指定范围内的消息
+        let messagesToSummarize = Array(messages[range])
+        
+        // 构建用于摘要的提示
+        let summaryPrompt = """
+        请为以下对话片段生成一个简洁的摘要，捕捉关键信息、讨论主题和结论：
+        
+        \(messagesToSummarize.map { ($0.isUser ? "用户: " : "AI: ") + $0.content }.joined(separator: "\n\n"))
+        
+        摘要:
+        """
+        
+        // 创建请求消息
+        let chatMessages = [
+            ChatMessage(role: "user", content: summaryPrompt)
+        ]
+        
+        // 创建请求体
+        let requestBody = ChatCompletionRequest(
+            model: currentModel.rawValue,
+            messages: chatMessages,
+            stream: false,
+            max_tokens: 500,
+            temperature: 0.7,
+            top_p: 0.7,
+            top_k: 50,
+            frequency_penalty: 0.5,
+            n: 1,
+            response_format: ChatCompletionRequest.ResponseFormat(type: "text")
+        )
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        do {
+            let encoder = JSONEncoder()
+            request.httpBody = try encoder.encode(requestBody)
+            print("📤 生成摘要请求 - 消息范围: \(range.lowerBound) 到 \(range.upperBound)")
+        } catch {
+            print("❌ 摘要请求编码失败: \(error.localizedDescription)")
+            return Fail(error: APIError.requestFailed(error)).eraseToAnyPublisher()
+        }
+        
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                switch httpResponse.statusCode {
+                case 200...299:
+                    return data
+                case 401:
+                    throw APIError.unauthorized
+                case 429:
+                    throw APIError.rateLimited
+                default:
+                    if let errorMessage = String(data: data, encoding: .utf8) {
+                        throw APIError.apiError(errorMessage)
+                    } else {
+                        throw APIError.apiError("状态码: \(httpResponse.statusCode)")
+                    }
+                }
+            }
+            .decode(type: ChatCompletionResponse.self, decoder: JSONDecoder())
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                } else if error is DecodingError {
+                    return APIError.decodingFailed(error)
+                } else {
+                    return APIError.requestFailed(error)
+                }
+            }
+            .map { response in
+                if let summaryContent = response.choices?.first?.message?.content {
+                    print("✅ 成功生成摘要")
+                    return ConversationSummary(
+                        content: summaryContent,
+                        date: Date(),
+                        messageRange: range
+                    )
+                } else {
+                    print("⚠️ 摘要生成失败")
+                    return ConversationSummary(
+                        content: "未能生成摘要",
+                        date: Date(),
+                        messageRange: range
+                    )
+                }
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // 新增：分析消息重要性
+    func analyzeImportance(message: Message) -> AnyPublisher<Int, APIError> {
+        guard let url = URL(string: baseURL) else {
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        }
+        
+        // 构建分析提示
+        let analysisPrompt = """
+        请分析以下消息的重要性，从1到10打分，其中1分表示不重要，10分表示非常重要。
+        只返回分数数字，不要有其他内容。
+        
+        消息: \(message.content)
+        
+        重要性评分(1-10):
+        """
+        
+        let chatMessages = [
+            ChatMessage(role: "user", content: analysisPrompt)
+        ]
+        
+        let requestBody = ChatCompletionRequest(
+            model: currentModel.rawValue,
+            messages: chatMessages,
+            stream: false,
+            max_tokens: 10,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: 50,
+            frequency_penalty: 0.0,
+            n: 1,
+            response_format: ChatCompletionRequest.ResponseFormat(type: "text")
+        )
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        do {
+            let encoder = JSONEncoder()
+            request.httpBody = try encoder.encode(requestBody)
+        } catch {
+            return Fail(error: APIError.requestFailed(error)).eraseToAnyPublisher()
+        }
+        
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                switch httpResponse.statusCode {
+                case 200...299:
+                    return data
+                case 401:
+                    throw APIError.unauthorized
+                case 429:
+                    throw APIError.rateLimited
+                default:
+                    if let errorMessage = String(data: data, encoding: .utf8) {
+                        throw APIError.apiError(errorMessage)
+                    } else {
+                        throw APIError.apiError("状态码: \(httpResponse.statusCode)")
+                    }
+                }
+            }
+            .decode(type: ChatCompletionResponse.self, decoder: JSONDecoder())
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                } else if error is DecodingError {
+                    return APIError.decodingFailed(error)
+                } else {
+                    return APIError.requestFailed(error)
+                }
+            }
+            .map { response in
+                if let scoreText = response.choices?.first?.message?.content {
+                    // 尝试将返回的文本转换为整数
+                    let trimmedScoreText = scoreText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let score = Int(trimmedScoreText) {
+                        return min(max(score, 1), 10) // 确保分数在1-10范围内
+                    }
+                }
+                return 5 // 默认中等重要性
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // 新增：从消息中提取关键词
+    func extractKeywords(message: Message) -> AnyPublisher<[String], APIError> {
+        guard let url = URL(string: baseURL) else {
+            return Fail(error: APIError.invalidURL).eraseToAnyPublisher()
+        }
+        
+        // 构建关键词提取提示
+        let keywordsPrompt = """
+        请从以下消息中提取3-5个关键词，以逗号分隔。只返回关键词列表，不要有其他内容。
+        
+        消息: \(message.content)
+        
+        关键词:
+        """
+        
+        let chatMessages = [
+            ChatMessage(role: "user", content: keywordsPrompt)
+        ]
+        
+        let requestBody = ChatCompletionRequest(
+            model: currentModel.rawValue,
+            messages: chatMessages,
+            stream: false,
+            max_tokens: 50,
+            temperature: 0.3,
+            top_p: 0.9,
+            top_k: 50,
+            frequency_penalty: 0.0,
+            n: 1,
+            response_format: ChatCompletionRequest.ResponseFormat(type: "text")
+        )
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        do {
+            let encoder = JSONEncoder()
+            request.httpBody = try encoder.encode(requestBody)
+        } catch {
+            return Fail(error: APIError.requestFailed(error)).eraseToAnyPublisher()
+        }
+        
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                switch httpResponse.statusCode {
+                case 200...299:
+                    return data
+                case 401:
+                    throw APIError.unauthorized
+                case 429:
+                    throw APIError.rateLimited
+                default:
+                    if let errorMessage = String(data: data, encoding: .utf8) {
+                        throw APIError.apiError(errorMessage)
+                    } else {
+                        throw APIError.apiError("状态码: \(httpResponse.statusCode)")
+                    }
+                }
+            }
+            .decode(type: ChatCompletionResponse.self, decoder: JSONDecoder())
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                } else if error is DecodingError {
+                    return APIError.decodingFailed(error)
+                } else {
+                    return APIError.requestFailed(error)
+                }
+            }
+            .map { response in
+                if let keywordsText = response.choices?.first?.message?.content {
+                    // 将返回的关键词文本分割为数组
+                    let trimmedText = keywordsText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let keywords = trimmedText.split(separator: ",").map { 
+                        String($0).trimmingCharacters(in: .whitespacesAndNewlines) 
+                    }
+                    return keywords
+                }
+                return [] // 默认空数组
             }
             .eraseToAnyPublisher()
     }

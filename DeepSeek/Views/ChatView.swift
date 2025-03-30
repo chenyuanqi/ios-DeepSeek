@@ -217,23 +217,10 @@ struct ChatView: View {
                             .cornerRadius(16)
                         }
                         
-                        Button(action: {
-                            // 显示功能未开发提示
-                            viewModel.showFeatureNotAvailableMessage("联网功能正在开发中，敬请期待！")
-                        }) {
-                            HStack {
-                                Image(systemName: "globe")
-                                Text("联网")
-                            }
-                            .font(.system(size: 14))
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(16)
-                        }
+                        // 添加记忆策略按钮
+                        ContextStrategyButton(viewModel: viewModel)
                         
-                        // 新建对话按钮 - 移到联网按钮右侧
+                        // 新建对话按钮 - 现在是第三个按钮
                         Button(action: {
                             viewModel.startNewConversation()
                             isFirstAppearance = true
@@ -421,6 +408,47 @@ struct QuestionButton: View {
                 .padding()
                 .background(Color(.systemGray6))
                 .cornerRadius(8)
+        }
+    }
+}
+
+// 新增上下文策略切换按钮
+struct ContextStrategyButton: View {
+    @ObservedObject var viewModel: ChatViewModel
+    @State private var showingStrategyMenu = false
+    
+    var body: some View {
+        Button(action: {
+            showingStrategyMenu = true
+        }) {
+            HStack {
+                Image(systemName: "brain")
+                    .font(.system(size: 14))
+                Text("记忆")
+                    .font(.system(size: 14))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(.systemGray6))
+            .foregroundColor(.primary)
+            .cornerRadius(8)
+        }
+        .confirmationDialog("选择记忆策略", isPresented: $showingStrategyMenu, titleVisibility: .visible) {
+            Button("最近消息") {
+                viewModel.changeContextStrategy(.recentMessages)
+            }
+            
+            Button("重要消息") {
+                viewModel.changeContextStrategy(.importantMessages)
+            }
+            
+            Button("摘要上下文") {
+                viewModel.changeContextStrategy(.summarizedContext)
+            }
+        } message: {
+            Text("选择AI回复时使用的记忆策略")
         }
     }
 }
