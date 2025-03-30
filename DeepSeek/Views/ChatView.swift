@@ -24,10 +24,8 @@ struct ChatView: View {
                     Spacer()
                     
                     HStack(spacing: 4) {
-                        Text("元宝")
+                        Text("元气大宝")
                             .font(.system(size: 17, weight: .medium))
-                        Text("DeepSeek")
-                            .foregroundColor(.gray)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
@@ -84,10 +82,10 @@ struct ChatView: View {
                                 VStack(alignment: .leading, spacing: 12) {
                                     // 添加欢迎用户名
                                     if let username = authViewModel.currentUser?.username {
-                                        Text("Hi~ \(username)，我是元宝")
+                                        Text("Hi~ \(username)，我是元气大宝")
                                             .font(.system(size: 24, weight: .medium))
                                     } else {
-                                        Text("Hi~ 我是元宝")
+                                        Text("Hi~ 我是元气大宝")
                                             .font(.system(size: 24, weight: .medium))
                                     }
                                     
@@ -302,52 +300,81 @@ struct MessageView: View {
     let message: Message
     var isTyping: Bool = false
     @State private var cursorVisible = false
+    @State private var currentTime = Date()
     
     var body: some View {
-        HStack {
-            if message.isUser {
-                Spacer()
-                Text(message.content)
+        VStack(spacing: 4) {
+            HStack {
+                if message.isUser {
+                    Spacer()
+                    Text(message.content)
+                        .padding(12)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(16)
+                        .cornerRadius(4, corners: [.bottomRight])
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)
+                } else {
+                    HStack(alignment: .bottom, spacing: 0) {
+                        // 处理消息内容，确保没有前导空行
+                        let processedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                        
+                        if processedContent.isEmpty && isTyping {
+                            Text(" ") // 空内容但正在输入时显示一个空格，以显示光标
+                        } else {
+                            Text(processedContent)
+                                .animation(.easeIn(duration: 0.1), value: processedContent) // 为内容变化添加轻微动画
+                        }
+                        
+                        // 如果正在输入中，显示打字光标
+                        if isTyping {
+                            Rectangle()
+                                .fill(Color.black)
+                                .frame(width: 2, height: 16)
+                                .opacity(cursorVisible ? 1 : 0)
+                                .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: cursorVisible)
+                                .onAppear {
+                                    cursorVisible = true
+                                }
+                        }
+                    }
                     .padding(12)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
+                    .background(Color(.systemGray6))
+                    .foregroundColor(.black)
                     .cornerRadius(16)
-                    .cornerRadius(4, corners: [.bottomRight])
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)
-            } else {
-                HStack(alignment: .bottom, spacing: 0) {
-                    // 处理消息内容，确保没有前导空行
-                    let processedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .cornerRadius(4, corners: [.bottomLeft])
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
                     
-                    if processedContent.isEmpty && isTyping {
-                        Text(" ") // 空内容但正在输入时显示一个空格，以显示光标
-                    } else {
-                        Text(processedContent)
-                            .animation(.easeIn(duration: 0.1), value: processedContent) // 为内容变化添加轻微动画
-                    }
-                    
-                    // 如果正在输入中，显示打字光标
-                    if isTyping {
-                        Rectangle()
-                            .fill(Color.black)
-                            .frame(width: 2, height: 16)
-                            .opacity(cursorVisible ? 1 : 0)
-                            .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: cursorVisible)
-                            .onAppear {
-                                cursorVisible = true
-                            }
-                    }
+                    Spacer()
                 }
-                .padding(12)
-                .background(Color(.systemGray6))
-                .foregroundColor(.black)
-                .cornerRadius(16)
-                .cornerRadius(4, corners: [.bottomLeft])
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
-                
-                Spacer()
             }
+            
+            // 消息时间显示
+            HStack {
+                if message.isUser {
+                    Spacer()
+                    Text(formatTime(currentTime))
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                } else {
+                    Text(formatTime(currentTime))
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 4)
         }
+        .onAppear {
+            // 使用当前时间，而不是消息的时间
+            currentTime = Date()
+        }
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 

@@ -62,9 +62,13 @@ struct ChatHistoryView: View {
                 Section(header: Text("今天").font(.system(size: 14)).foregroundColor(.gray)) {
                     ForEach(todayConversations) { conversation in
                         conversationRow(for: conversation)
-                    }
-                    .onDelete { indexSet in
-                        deleteConversations(from: todayConversations, at: indexSet)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    viewModel.deleteConversation(conversation)
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
                     }
                 }
             }
@@ -75,9 +79,13 @@ struct ChatHistoryView: View {
                 Section(header: Text("昨天").font(.system(size: 14)).foregroundColor(.gray)) {
                     ForEach(yesterdayConversations) { conversation in
                         conversationRow(for: conversation)
-                    }
-                    .onDelete { indexSet in
-                        deleteConversations(from: yesterdayConversations, at: indexSet)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    viewModel.deleteConversation(conversation)
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
                     }
                 }
             }
@@ -88,9 +96,13 @@ struct ChatHistoryView: View {
                 Section(header: Text("更早").font(.system(size: 14)).foregroundColor(.gray)) {
                     ForEach(earlierConversations) { conversation in
                         conversationRow(for: conversation)
-                    }
-                    .onDelete { indexSet in
-                        deleteConversations(from: earlierConversations, at: indexSet)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    viewModel.deleteConversation(conversation)
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
                     }
                 }
             }
@@ -170,7 +182,7 @@ struct ChatHistoryView: View {
                             
                             // 消息内容
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(message.isUser ? "你" : "元宝")
+                                Text(message.isUser ? "你" : "元气大宝")
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(message.isUser ? .blue : .purple)
                                 
@@ -215,8 +227,6 @@ struct ChatHistoryView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            
-            Divider()
         }
         .padding(.vertical, 4)
     }
@@ -282,14 +292,6 @@ struct ChatHistoryView: View {
             $0.date < yesterdayStart &&
             (searchText.isEmpty || $0.title.contains(searchText) || 
              $0.messages.first(where: { $0.isUser })?.content.contains(searchText) == true)
-        }
-    }
-    
-    // 删除对话
-    private func deleteConversations(from conversations: [Conversation], at indexSet: IndexSet) {
-        for index in indexSet {
-            let conversationToDelete = conversations[index]
-            viewModel.deleteConversation(conversationToDelete)
         }
     }
 }
