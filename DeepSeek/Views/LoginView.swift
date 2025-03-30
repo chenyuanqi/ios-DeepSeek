@@ -2,46 +2,45 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var isRegistering = false
-    @State private var isShowingPassword = false
+    @State private var showPassword = false
+    @State private var showConfirmPassword = false
     
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 30) {
-                    // 徽标
-                    VStack(spacing: 10) {
-                        Image(systemName: "brain")
+                VStack(spacing: 24) {
+                    // 顶部Logo
+                    VStack(spacing: 12) {
+                        Image(systemName: "bolt.circle.fill")
                             .resizable()
-                            .aspectRatio(contentMode: .fit)
                             .frame(width: 80, height: 80)
                             .foregroundColor(.blue)
+                            .padding(.bottom, 10)
                         
-                        Text("DeepSeek")
-                            .font(.system(size: 32, weight: .bold))
+                        Text("DeepSeek AI")
+                            .font(.system(size: 28, weight: .bold))
                         
-                        Text(isRegistering ? "创建您的账户" : "欢迎回来")
-                            .font(.system(size: 18))
+                        Text(authViewModel.isRegistrationMode ? "创建账号，开启智能对话" : "欢迎回来")
+                            .font(.system(size: 16))
                             .foregroundColor(.gray)
                     }
-                    .padding(.top, 50)
+                    .padding(.top, 40)
                     .padding(.bottom, 20)
                     
-                    // 错误消息
+                    // 错误信息
                     if let errorMessage = authViewModel.errorMessage {
                         Text(errorMessage)
                             .font(.system(size: 14))
                             .foregroundColor(.red)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(8)
+                            .padding(.horizontal)
+                            .padding(.bottom, 10)
+                            .multilineTextAlignment(.center)
                     }
                     
-                    // 表单
+                    // 注册/登录表单
                     VStack(spacing: 16) {
-                        // 只在注册时显示用户名字段
-                        if isRegistering {
+                        // 用户名 (仅注册时显示)
+                        if authViewModel.isRegistrationMode {
                             FormField(
                                 icon: "person.fill",
                                 placeholder: "用户名",
@@ -49,97 +48,94 @@ struct LoginView: View {
                             )
                         }
                         
+                        // 邮箱
                         FormField(
                             icon: "envelope.fill",
-                            placeholder: "邮箱地址",
+                            placeholder: "邮箱",
                             text: $authViewModel.email,
-                            keyboardType: .emailAddress,
-                            autocapitalization: .none
+                            keyboardType: .emailAddress
                         )
                         
+                        // 密码
                         PasswordField(
                             placeholder: "密码",
                             text: $authViewModel.password,
-                            isShowingPassword: $isShowingPassword
+                            showPassword: $showPassword
                         )
                         
-                        // 确认密码字段仅在注册时显示
-                        if isRegistering {
+                        // 确认密码 (仅注册时显示)
+                        if authViewModel.isRegistrationMode {
                             PasswordField(
                                 placeholder: "确认密码",
                                 text: $authViewModel.confirmPassword,
-                                isShowingPassword: $isShowingPassword
+                                showPassword: $showConfirmPassword
                             )
                         }
-                    }
-                    .padding(.horizontal)
-                    
-                    // 登录/注册按钮
-                    Button(action: {
-                        if isRegistering {
-                            authViewModel.register()
-                        } else {
-                            authViewModel.login()
-                        }
-                    }) {
-                        HStack {
-                            Spacer()
-                            if authViewModel.isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .padding(.trailing, 5)
+                        
+                        // 提交按钮
+                        Button(action: {
+                            if authViewModel.isRegistrationMode {
+                                authViewModel.register()
+                            } else {
+                                authViewModel.login()
                             }
-                            Text(isRegistering ? "注册" : "登录")
-                                .fontWeight(.semibold)
-                            Spacer()
+                        }) {
+                            HStack {
+                                if authViewModel.isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .padding(.trailing, 5)
+                                }
+                                
+                                Text(authViewModel.isRegistrationMode ? "注册" : "登录")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
                         }
-                        .padding(.vertical, 16)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .disabled(authViewModel.isLoading)
                     }
-                    .disabled(authViewModel.isLoading)
                     .padding(.horizontal)
                     
-                    // 切换登录/注册模式
+                    // 切换登录/注册
                     Button(action: {
-                        withAnimation {
-                            isRegistering.toggle()
-                            authViewModel.resetForm()
-                        }
+                        authViewModel.toggleRegistrationMode()
                     }) {
-                        Text(isRegistering ? "已有账号？点击登录" : "没有账号？点击注册")
+                        Text(authViewModel.isRegistrationMode ? "已有账号？点击登录" : "没有账号？点击注册")
                             .foregroundColor(.blue)
-                            .font(.system(size: 14, weight: .medium))
                     }
-                    .padding()
+                    .padding(.top, 10)
+                    .disabled(authViewModel.isLoading)
                     
                     Spacer()
                 }
                 .padding()
             }
+            .background(Color(.systemBackground))
         }
     }
 }
 
-// 通用表单字段视图
+// 表单输入组件
 struct FormField: View {
     let icon: String
     let placeholder: String
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
-    var autocapitalization: UITextAutocapitalizationType = .words
     
     var body: some View {
         HStack {
             Image(systemName: icon)
                 .foregroundColor(.gray)
-                .frame(width: 20)
+                .frame(width: 24)
             
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
-                .autocapitalization(autocapitalization)
-                .padding(.leading, 8)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
         }
         .padding()
         .background(Color(.systemGray6))
@@ -147,31 +143,32 @@ struct FormField: View {
     }
 }
 
-// 密码输入字段
+// 密码输入组件
 struct PasswordField: View {
     let placeholder: String
     @Binding var text: String
-    @Binding var isShowingPassword: Bool
+    @Binding var showPassword: Bool
     
     var body: some View {
         HStack {
             Image(systemName: "lock.fill")
                 .foregroundColor(.gray)
-                .frame(width: 20)
+                .frame(width: 24)
             
-            if isShowingPassword {
+            if showPassword {
                 TextField(placeholder, text: $text)
                     .autocapitalization(.none)
-                    .padding(.leading, 8)
+                    .disableAutocorrection(true)
             } else {
                 SecureField(placeholder, text: $text)
-                    .padding(.leading, 8)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
             }
             
             Button(action: {
-                isShowingPassword.toggle()
+                showPassword.toggle()
             }) {
-                Image(systemName: isShowingPassword ? "eye.slash.fill" : "eye.fill")
+                Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
                     .foregroundColor(.gray)
             }
         }
@@ -181,10 +178,10 @@ struct PasswordField: View {
     }
 }
 
-// 预览模式需要提供AuthViewModel
+// 预览
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         LoginView()
-            .environmentObject(AuthViewModel())
+            .environmentObject(AuthViewModel(previewMode: true))
     }
 } 

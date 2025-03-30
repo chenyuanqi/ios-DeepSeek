@@ -1,36 +1,66 @@
 import Foundation
 
-struct User: Codable, Identifiable {
-    let id: UUID
-    let email: String
-    var username: String
+// 用户模型
+struct User: Identifiable, Codable {
+    let id: Int
+    let email: String?
+    let nickname: String
+    let avatar: String?
+    let signature: String?
+    let created_at: String
+    let updated_at: String
     
-    init(id: UUID = UUID(), email: String, username: String) {
-        self.id = id
-        self.email = email
-        self.username = username
+    // 方便访问的属性
+    var username: String {
+        return nickname
+    }
+    
+    var avatarURL: URL? {
+        guard let avatar = avatar else { return nil }
+        return URL(string: avatar)
+    }
+    
+    var formattedCreatedDate: String {
+        // 将ISO 8601日期字符串转换为更友好的格式
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        dateFormatter.locale = Locale(identifier: "zh_CN")
+        
+        guard let date = dateFormatter.date(from: created_at) else {
+            return "未知时间"
+        }
+        
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = "yyyy年MM月dd日"
+        outputFormatter.locale = Locale(identifier: "zh_CN")
+        
+        return outputFormatter.string(from: date)
+    }
+    
+    // 提供预览用的模拟数据
+    static var mockUser: User {
+        return User(
+            id: 1,
+            email: "user@example.com",
+            nickname: "测试用户",
+            avatar: "https://via.placeholder.com/150",
+            signature: "这是一个测试签名",
+            created_at: "2023-03-27T08:00:00Z",
+            updated_at: "2023-03-27T08:00:00Z"
+        )
     }
 }
 
-enum AuthError: Error, LocalizedError {
-    case invalidCredentials
-    case emailAlreadyInUse
-    case weakPassword
-    case networkError
-    case unknown
+// 认证错误枚举
+struct AuthError: Error, LocalizedError {
+    let message: String
     
     var errorDescription: String? {
-        switch self {
-        case .invalidCredentials:
-            return "邮箱或密码不正确"
-        case .emailAlreadyInUse:
-            return "该邮箱已被注册"
-        case .weakPassword:
-            return "密码强度不足，请使用至少8位包含数字和字母的密码"
-        case .networkError:
-            return "网络连接错误，请检查网络后重试"
-        case .unknown:
-            return "发生未知错误，请稍后重试"
-        }
+        return message
     }
+    
+    static let invalidCredentials = AuthError(message: "邮箱或密码错误")
+    static let emailAlreadyInUse = AuthError(message: "该邮箱已被注册")
+    static let weakPassword = AuthError(message: "密码强度不足，请使用包含字母和数字的组合")
+    static let unknown = AuthError(message: "发生未知错误，请稍后重试")
 } 
