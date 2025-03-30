@@ -129,11 +129,8 @@ struct ChatHistoryView: View {
         VStack(spacing: 0) {
             // 对话基本信息行
             Button(action: {
-                if expandedConversationId == conversation.id {
-                    expandedConversationId = nil // 如果已展开，则收起
-                } else {
-                    expandedConversationId = conversation.id // 如果未展开，则展开
-                }
+                viewModel.selectConversation(conversation)
+                isPresented = false
             }) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -144,11 +141,6 @@ struct ChatHistoryView: View {
                             .lineLimit(1)
                         
                         Spacer()
-                        
-                        // 展开/收起指示器
-                        Image(systemName: expandedConversationId == conversation.id ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray)
                     }
                     
                     // 时间信息行
@@ -169,10 +161,11 @@ struct ChatHistoryView: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            // 展开的对话内容
+            // 如果展开，则显示最近的5条消息预览
             if expandedConversationId == conversation.id {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(conversation.messages.prefix(6)) { message in
+                    // 消息预览区
+                    ForEach(conversation.messages.suffix(5)) { message in
                         HStack(alignment: .top) {
                             // 用户图标或AI图标
                             Image(systemName: message.isUser ? "person.circle.fill" : "brain")
@@ -194,38 +187,56 @@ struct ChatHistoryView: View {
                         }
                     }
                     
-                    // 如果消息超过6条，显示"查看更多"按钮
-                    if conversation.messages.count > 6 {
-                        Button(action: {
-                            viewModel.selectConversation(conversation)
-                            isPresented = false
-                        }) {
+                    // 删除按钮
+                    Button(action: {
+                        viewModel.deleteConversation(conversation)
+                        expandedConversationId = nil
+                    }) {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "trash")
+                                .foregroundColor(.white)
+                            Text("删除此对话")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(Color.red)
+                        .cornerRadius(8)
+                    }
+                    .padding(.top, 8)
+                    
+                    // 查看完整对话按钮
+                    Button(action: {
+                        viewModel.selectConversation(conversation)
+                        isPresented = false
+                    }) {
+                        HStack {
+                            Spacer()
                             Text("查看完整对话")
                                 .font(.system(size: 14))
                                 .foregroundColor(.blue)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.vertical, 4)
+                            Spacer()
                         }
+                        .padding(.vertical, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
                     }
+                    .padding(.top, 4)
                 }
                 .padding(12)
                 .background(Color(.systemGray6))
                 .cornerRadius(8)
                 .padding(.vertical, 8)
             }
-            
-            // 查看按钮
-            if expandedConversationId != conversation.id {
-                Button(action: {
-                    viewModel.selectConversation(conversation)
-                    isPresented = false
-                }) {
-                    Text("继续对话")
-                        .font(.system(size: 14))
-                        .foregroundColor(.blue)
-                        .padding(.vertical, 4)
-                }
-                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .contentShape(Rectangle()) // 确保整个区域可点击
+        .onTapGesture {
+            if expandedConversationId == conversation.id {
+                expandedConversationId = nil // 如果已展开，则收起
+            } else {
+                expandedConversationId = conversation.id // 如果未展开，则展开
             }
         }
         .padding(.vertical, 4)

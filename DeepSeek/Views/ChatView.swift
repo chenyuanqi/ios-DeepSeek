@@ -33,7 +33,7 @@ struct ChatView: View {
                     
                     Spacer()
                     
-                    // 新增用户头像菜单
+                    // 用户头像菜单
                     Button(action: {
                         showingProfileMenu = true
                     }) {
@@ -42,11 +42,6 @@ struct ChatView: View {
                             .imageScale(.large)
                     }
                     .confirmationDialog("个人设置", isPresented: $showingProfileMenu, titleVisibility: .visible) {
-                        Button("新建对话", action: {
-                            viewModel.startNewConversation()
-                            isFirstAppearance = true
-                        })
-                        
                         Button("退出登录", role: .destructive, action: {
                             authViewModel.logout()
                         })
@@ -229,6 +224,23 @@ struct ChatView: View {
                             HStack {
                                 Image(systemName: "globe")
                                 Text("联网")
+                            }
+                            .font(.system(size: 14))
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(16)
+                        }
+                        
+                        // 新建对话按钮 - 移到联网按钮右侧
+                        Button(action: {
+                            viewModel.startNewConversation()
+                            isFirstAppearance = true
+                        }) {
+                            HStack {
+                                Image(systemName: "plus")
+                                Text("新对话")
                             }
                             .font(.system(size: 14))
                             .foregroundColor(.black)

@@ -149,11 +149,32 @@ class ChatViewModel: ObservableObject {
                         if !self.streamingText.isEmpty {
                             // 处理空行
                             let processedText = self.streamingText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            self.updateLastAIMessage(content: processedText)
                             
-                            // 保存对话记录
-                            if var conversation = self.currentConversation {
-                                self.updateConversation(conversation)
+                            // 更新最后一条AI消息的内容
+                            if let lastMessage = self.currentMessages.last, !lastMessage.isUser {
+                                self.updateLastAIMessage(content: processedText)
+                                
+                                // 保存对话记录
+                                if var conversation = self.currentConversation {
+                                    if !conversation.messages.contains(where: { !$0.isUser && $0.content == processedText }) {
+                                        // 确保消息已正确保存到对话中
+                                        let aiMessage = Message(content: processedText, isUser: false)
+                                        conversation.messages = conversation.messages.filter { $0.isUser || $0.content != "" }
+                                        conversation.messages.append(aiMessage)
+                                        self.currentConversation = conversation
+                                    }
+                                    self.updateConversation(conversation)
+                                }
+                            } else {
+                                // 如果没有找到最后一条AI消息，创建一个新的
+                                let aiMessage = Message(content: processedText, isUser: false)
+                                self.addAIMessage(aiMessage)
+                            }
+                            
+                            // 打印保存状态
+                            print("📊 对话保存状态：\(self.currentConversation?.messages.count ?? 0)条消息")
+                            self.currentConversation?.messages.forEach { msg in
+                                print("  \(msg.isUser ? "👤" : "🤖") \(msg.content.prefix(20))...")
                             }
                         }
                     }
