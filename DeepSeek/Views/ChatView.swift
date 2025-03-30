@@ -44,6 +44,22 @@ struct ChatView: View {
                 .padding(.horizontal)
                 .frame(height: 44)
                 
+                // 功能未开发提示
+                if let message = viewModel.featureNotAvailableMessage {
+                    HStack {
+                        Text(message)
+                            .font(.system(size: 14))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .background(Color.orange.opacity(0.2))
+                            .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                    .transition(.opacity)
+                    .animation(.easeInOut, value: viewModel.featureNotAvailableMessage != nil)
+                }
+                
                 // 聊天内容区域
                 ScrollViewReader { scrollView in
                     ScrollView {
@@ -187,7 +203,8 @@ struct ChatView: View {
                         }
                         
                         Button(action: {
-                            // 联网按钮动作
+                            // 显示功能未开发提示
+                            viewModel.showFeatureNotAvailableMessage("联网功能正在开发中，敬请期待！")
                         }) {
                             HStack {
                                 Image(systemName: "globe")

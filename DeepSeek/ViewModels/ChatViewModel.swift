@@ -11,11 +11,15 @@ class ChatViewModel: ObservableObject {
     @Published var isStreaming = false
     @Published var isDeepThinkingEnabled = false  // 是否启用深度思考模式
     @Published var thinkingPrompt: String = "正在思考..." // 思考提示文本
+    @Published var featureNotAvailableMessage: String? // 功能未开发提示
     
     private let apiService = APIService()
     private var cancellables = Set<AnyCancellable>()
     private var thinkingTimer: Timer?
     private var thinkingDots = 0
+    
+    // 用于清除提示消息的计时器
+    private var messageTimer: Timer?
     
     private let thinkingPrompts = [
         "正在思考",
@@ -191,12 +195,15 @@ class ChatViewModel: ObservableObject {
         if var conversation = currentConversation {
             conversation.messages.append(message)
             
-            // 如果是第一条消息，使用用户消息内容作为对话标题
-            if conversation.messages.count == 2 {
-                let userContent = conversation.messages.first?.content ?? ""
-                conversation.title = userContent.count > 20 ? 
-                    String(userContent.prefix(20)) + "..." : 
-                    userContent
+            // 如果是第一条AI消息回复，使用用户的第一条消息作为对话标题
+            if conversation.messages.count == 2 && conversation.title == "新对话" {
+                if let userMessage = conversation.messages.first(where: { $0.isUser }) {
+                    let userContent = userMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // 如果用户消息超过20个字符，截断并添加省略号
+                    conversation.title = userContent.count > 20 ? 
+                        String(userContent.prefix(20)) + "..." : 
+                        userContent
+                }
             }
             
             currentConversation = conversation
@@ -253,5 +260,23 @@ class ChatViewModel: ObservableObject {
                 startNewConversation()
             }
         }
+    }
+    
+    // 显示功能未开发提示
+    func showFeatureNotAvailableMessage(_ message: String) {
+        self.featureNotAvailableMessage = message
+        
+        // 3秒后自动清除提示
+        messageTimer?.invalidate()
+        messageTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.featureNotAvailableMessage = nil
+            }
+        }
+    }
+    
+    deinit {
+        messageTimer?.invalidate()
+        thinkingTimer?.invalidate()
     }
 } 

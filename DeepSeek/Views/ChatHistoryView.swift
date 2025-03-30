@@ -4,6 +4,7 @@ struct ChatHistoryView: View {
     @ObservedObject var viewModel: ChatViewModel
     @Binding var isPresented: Bool
     @State private var searchText = ""
+    @State private var expandedConversationId: UUID? = nil
     
     var body: some View {
         VStack(spacing: 0) {
@@ -97,21 +98,143 @@ struct ChatHistoryView: View {
         .listStyle(PlainListStyle())
     }
     
-    private func conversationRow(for conversation: Conversation) -> some View {
-        Button(action: {
-            viewModel.selectConversation(conversation)
-            isPresented = false
-        }) {
-            HStack {
-                Text(conversation.title)
-                    .font(.system(size: 16))
-                    .foregroundColor(.black)
-                Spacer()
-                Text(formatDate(conversation.date))
-                    .font(.system(size: 14))
-                    .foregroundColor(.gray)
+    // 获取对话标题（用户第一句话，过长时截断）
+    private func getConversationTitle(_ conversation: Conversation) -> String {
+        // 获取用户的第一条消息
+        if let firstUserMessage = conversation.messages.first(where: { $0.isUser }) {
+            let content = firstUserMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            // 如果标题超过20个字符，截断并添加省略号
+            if content.count > 20 {
+                return String(content.prefix(20)) + "..."
             }
-            .padding(.vertical, 4)
+            return content
+        }
+        // 如果没有用户消息，返回默认标题
+        return conversation.title
+    }
+    
+    private func conversationRow(for conversation: Conversation) -> some View {
+        VStack(spacing: 0) {
+            // 对话基本信息行
+            Button(action: {
+                if expandedConversationId == conversation.id {
+                    expandedConversationId = nil // 如果已展开，则收起
+                } else {
+                    expandedConversationId = conversation.id // 如果未展开，则展开
+                }
+            }) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        // 显示第一条用户消息内容作为标题（截断处理）
+                        Text(getConversationTitle(conversation))
+                            .font(.system(size: 16))
+                            .foregroundColor(.black)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        // 展开/收起指示器
+                        Image(systemName: expandedConversationId == conversation.id ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                    }
+                    
+                    // 时间信息行
+                    HStack {
+                        Text(formatTime(conversation.date))
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                        
+                        Spacer()
+                        
+                        // 显示消息数量
+                        Text("\(conversation.messages.count)条消息")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // 展开的对话内容
+            if expandedConversationId == conversation.id {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(conversation.messages.prefix(6)) { message in
+                        HStack(alignment: .top) {
+                            // 用户图标或AI图标
+                            Image(systemName: message.isUser ? "person.circle.fill" : "brain")
+                                .font(.system(size: 14))
+                                .foregroundColor(message.isUser ? .blue : .purple)
+                                .frame(width: 16, height: 16)
+                            
+                            // 消息内容
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(message.isUser ? "你" : "元宝")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(message.isUser ? .blue : .purple)
+                                
+                                Text(message.content)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.black)
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                    
+                    // 如果消息超过6条，显示"查看更多"按钮
+                    if conversation.messages.count > 6 {
+                        Button(action: {
+                            viewModel.selectConversation(conversation)
+                            isPresented = false
+                        }) {
+                            Text("查看完整对话")
+                                .font(.system(size: 14))
+                                .foregroundColor(.blue)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 4)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .padding(.vertical, 8)
+            }
+            
+            // 查看按钮
+            if expandedConversationId != conversation.id {
+                Button(action: {
+                    viewModel.selectConversation(conversation)
+                    isPresented = false
+                }) {
+                    Text("继续对话")
+                        .font(.system(size: 14))
+                        .foregroundColor(.blue)
+                        .padding(.vertical, 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            
+            Divider()
+        }
+        .padding(.vertical, 4)
+    }
+    
+    // 详细时间格式化工具
+    private func formatTime(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        
+        if calendar.isDateInToday(date) {
+            formatter.dateFormat = "HH:mm"
+            return "今天 " + formatter.string(from: date)
+        } else if calendar.isDateInYesterday(date) {
+            formatter.dateFormat = "HH:mm"
+            return "昨天 " + formatter.string(from: date)
+        } else {
+            formatter.dateFormat = "MM月dd日 HH:mm"
+            return formatter.string(from: date)
         }
     }
     
@@ -134,7 +257,8 @@ struct ChatHistoryView: View {
         let calendar = Calendar.current
         return viewModel.conversations.filter { 
             calendar.isDateInToday($0.date) &&
-            (searchText.isEmpty || $0.title.contains(searchText))
+            (searchText.isEmpty || $0.title.contains(searchText) || 
+             $0.messages.first(where: { $0.isUser })?.content.contains(searchText) == true)
         }
     }
     
@@ -143,7 +267,8 @@ struct ChatHistoryView: View {
         let calendar = Calendar.current
         return viewModel.conversations.filter { 
             calendar.isDateInYesterday($0.date) &&
-            (searchText.isEmpty || $0.title.contains(searchText))
+            (searchText.isEmpty || $0.title.contains(searchText) || 
+             $0.messages.first(where: { $0.isUser })?.content.contains(searchText) == true)
         }
     }
     
@@ -155,7 +280,8 @@ struct ChatHistoryView: View {
         
         return viewModel.conversations.filter { 
             $0.date < yesterdayStart &&
-            (searchText.isEmpty || $0.title.contains(searchText))
+            (searchText.isEmpty || $0.title.contains(searchText) || 
+             $0.messages.first(where: { $0.isUser })?.content.contains(searchText) == true)
         }
     }
     
