@@ -14,19 +14,36 @@ struct DeepSeekApp: App {
     // 注册AppDelegate
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
+    // 认证状态管理
+    @StateObject private var authViewModel = AuthViewModel()
+    
     init() {
         // 如果需要，可以在这里添加初始化代码
     }
     
     var body: some Scene {
         WindowGroup {
-            ChatView()
-                .onAppear {
-                    // 确保网络连接权限设置正确
-                    #if DEBUG
-                    print("DeepSeek应用已启动，网络请求已配置")
-                    #endif
+            ZStack {
+                if authViewModel.isAuthenticated {
+                    // 用户已登录，显示主界面
+                    ChatView()
+                        .environmentObject(authViewModel)
+                        .onAppear {
+                            // 确保网络连接权限设置正确
+                            #if DEBUG
+                            print("DeepSeek应用已启动，网络请求已配置")
+                            #endif
+                        }
+                } else {
+                    // 用户未登录，显示登录界面
+                    LoginView()
+                        .environmentObject(authViewModel)
                 }
+            }
+            .onAppear {
+                // 检查保存的登录状态
+                authViewModel.checkAuthState()
+            }
         }
     }
 }

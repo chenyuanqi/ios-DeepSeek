@@ -406,6 +406,10 @@ class StreamPublisher: Publisher {
                 
                 // 获取字符串并处理多行数据
                 if let text = String(data: data, encoding: .utf8) {
+                    // 为调试目的输出一部分数据
+                    Swift.print("🔍 样本数据: \(text.prefix(100))...")
+                    
+                    // 按照SSE格式分割数据流
                     let lines = text.components(separatedBy: "data: ")
                     Swift.print("📑 收到数据行数: \(lines.count)")
                     
@@ -424,23 +428,40 @@ class StreamPublisher: Publisher {
                         
                         do {
                             let chunkData = trimmedLine.data(using: .utf8)!
+                            Swift.print("🧩 处理数据块: \(trimmedLine.prefix(20))...")
+                            
                             let chunk = try self.decoder.decode(ChatCompletionChunk.self, from: chunkData)
                             chunkCount += 1
                             
                             if let contentDelta = chunk.choices?.first?.delta?.content, !contentDelta.isEmpty {
                                 contentChunkCount += 1
+                                Swift.print("📝 发送内容块: \(contentDelta)")
                                 _ = self.subscriber?.receive(contentDelta)
                             }
                         } catch {
-                            // 解析错误时跳过
+                            // 解析错误时跳过，但记录错误信息
                             Swift.print("⚠️ 解析数据块失败: \(error.localizedDescription)")
+                            Swift.print("⚠️ 问题数据: \(trimmedLine.prefix(50))...")
                             continue
                         }
                     }
                     
                     Swift.print("📊 解析结果: 总数据块\(chunkCount)个, 内容块\(contentChunkCount)个")
-                    Swift.print("✅ 流式传输完成")
-                    self.subscriber?.receive(completion: .finished)
+                    
+                    // 只有当成功处理了至少一个内容块时才完成
+                    if contentChunkCount > 0 {
+                        Swift.print("✅ 流式传输完成，已发送\(contentChunkCount)个内容块")
+                        self.subscriber?.receive(completion: .finished)
+                    } else {
+                        Swift.print("⚠️ 没有找到可用的内容块")
+                        // 如果没有内容，但解析成功，仍然完成
+                        if chunkCount > 0 {
+                            self.subscriber?.receive(completion: .finished)
+                        } else {
+                            // 如果连一个块都没解析成功，报告错误
+                            self.subscriber?.receive(completion: .failure(APIError.apiError("无法解析有效的内容块")))
+                        }
+                    }
                 } else {
                     Swift.print("❌ 无法解析响应数据为文本")
                     self.subscriber?.receive(completion: .failure(APIError.invalidResponse))
@@ -456,6 +477,7 @@ class StreamPublisher: Publisher {
         }
         
         func cancel() {
+            Swift.print("🛑 取消流式请求")
             task?.cancel()
             subscriber = nil
         }

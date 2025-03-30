@@ -2,10 +2,12 @@ import SwiftUI
 
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var messageText = ""
     @State private var showingChatHistory = false
     @State private var isFirstAppearance = true
     @State private var previousMessageCount = 0
+    @State private var showingProfileMenu = false
     
     var body: some View {
         NavigationView {
@@ -33,12 +35,25 @@ struct ChatView: View {
                     
                     Spacer()
                     
+                    // 新增用户头像菜单
                     Button(action: {
-                        viewModel.startNewConversation()
-                        isFirstAppearance = true
+                        showingProfileMenu = true
                     }) {
-                        Image(systemName: "square.and.pencil")
+                        Image(systemName: "person.crop.circle")
                             .foregroundColor(.black)
+                            .imageScale(.large)
+                    }
+                    .confirmationDialog("个人设置", isPresented: $showingProfileMenu, titleVisibility: .visible) {
+                        Button("新建对话", action: {
+                            viewModel.startNewConversation()
+                            isFirstAppearance = true
+                        })
+                        
+                        Button("退出登录", role: .destructive, action: {
+                            authViewModel.logout()
+                        })
+                        
+                        Button("取消", role: .cancel, action: {})
                     }
                 }
                 .padding(.horizontal)
@@ -67,8 +82,14 @@ struct ChatView: View {
                             // 欢迎视图（仅当没有消息时显示）
                             VStack(alignment: .leading, spacing: 20) {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    Text("Hi~ 我是元宝")
-                                        .font(.system(size: 24, weight: .medium))
+                                    // 添加欢迎用户名
+                                    if let username = authViewModel.currentUser?.username {
+                                        Text("Hi~ \(username)，我是元宝")
+                                            .font(.system(size: 24, weight: .medium))
+                                    } else {
+                                        Text("Hi~ 我是元宝")
+                                            .font(.system(size: 24, weight: .medium))
+                                    }
                                     
                                     Text("你身边的智能助手，可以为你答疑解惑、尽情创作，快来点击以下任一功能体验吧～")
                                         .font(.system(size: 16))
@@ -158,10 +179,11 @@ struct ChatView: View {
                             previousMessageCount = messages.count
                         }
                     }
-                    .onReceive(viewModel.$streamingText) { _ in
-                        // 当流式文本更新时，滚动到最后一条消息
+                    .onReceive(viewModel.$streamingText) { text in
+                        // 当流式文本更新时，确保滚动到最后一条消息
                         if viewModel.isStreaming, let lastMessage = viewModel.currentMessages.last {
-                            withAnimation {
+                            // 使用比较短的动画时间，让滚动更及时
+                            withAnimation(.easeOut(duration: 0.2)) {
                                 scrollView.scrollTo(lastMessage.id, anchor: .bottom)
                             }
                         }
@@ -297,7 +319,12 @@ struct MessageView: View {
                     // 处理消息内容，确保没有前导空行
                     let processedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
                     
-                    Text(processedContent.isEmpty && isTyping ? " " : processedContent)
+                    if processedContent.isEmpty && isTyping {
+                        Text(" ") // 空内容但正在输入时显示一个空格，以显示光标
+                    } else {
+                        Text(processedContent)
+                            .animation(.easeIn(duration: 0.1), value: processedContent) // 为内容变化添加轻微动画
+                    }
                     
                     // 如果正在输入中，显示打字光标
                     if isTyping {
@@ -363,5 +390,6 @@ struct QuestionButton: View {
 struct ChatView_Previews: PreviewProvider {
     static var previews: some View {
         ChatView()
+            .environmentObject(AuthViewModel())
     }
 } 

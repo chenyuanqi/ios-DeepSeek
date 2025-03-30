@@ -122,31 +122,39 @@ class ChatViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    self?.isStreaming = false
-                    self?.stopThinkingAnimation() // 停止思考动画
+                    guard let self = self else { return }
+                    
+                    self.isLoading = false
+                    self.isStreaming = false
+                    self.stopThinkingAnimation() // 停止思考动画
                     
                     if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
+                        self.errorMessage = error.localizedDescription
                         print("❌ AI响应失败: \(error.localizedDescription)")
                         
                         // 如果API调用失败，添加一个错误消息
                         let errorContent = "抱歉，发生了错误：\(error.localizedDescription)"
                         
                         // 更新临时消息或添加新的错误消息
-                        if let lastMessage = self?.currentMessages.last, !lastMessage.isUser {
-                            self?.updateLastAIMessage(content: errorContent)
+                        if let lastMessage = self.currentMessages.last, !lastMessage.isUser {
+                            self.updateLastAIMessage(content: errorContent)
                         } else {
                             let errorMessage = Message(content: errorContent, isUser: false)
-                            self?.addAIMessage(errorMessage)
+                            self.addAIMessage(errorMessage)
                         }
                     } else {
-                        print("✅ AI响应完成，总字数: \(self?.streamingText.count ?? 0)")
-                        // 成功完成流式传输，更新最后的消息
-                        if !self!.streamingText.isEmpty {
+                        print("✅ AI响应完成，总字数: \(self.streamingText.count)")
+                        
+                        // 成功完成流式传输，确保最后的消息内容正确
+                        if !self.streamingText.isEmpty {
                             // 处理空行
-                            let processedText = self!.streamingText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            self?.updateLastAIMessage(content: processedText)
+                            let processedText = self.streamingText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            self.updateLastAIMessage(content: processedText)
+                            
+                            // 保存对话记录
+                            if var conversation = self.currentConversation {
+                                self.updateConversation(conversation)
+                            }
                         }
                     }
                 },
@@ -160,9 +168,12 @@ class ChatViewModel: ObservableObject {
                         self.stopThinkingAnimation()
                     }
                     
+                    print("📄 收到内容块: \(chunk.prefix(min(20, chunk.count)))...")
+                    
+                    // 添加新的内容块
                     self.streamingText += chunk
                     
-                    // 更新最后一条消息的内容
+                    // 实时更新最后一条消息的内容
                     self.updateLastAIMessage(content: self.streamingText)
                 }
             )
@@ -176,12 +187,13 @@ class ChatViewModel: ObservableObject {
             updatedMessage.content = content
             currentMessages[index] = updatedMessage
             
-            // 更新当前对话
+            // 同时更新当前对话中的消息内容
             if var conversation = currentConversation {
                 if let conversationIndex = conversation.messages.lastIndex(where: { !$0.isUser }) {
                     conversation.messages[conversationIndex].content = content
                     currentConversation = conversation
                     // 不要每次流式更新都保存对话，太频繁
+                    // 只在接收完成时保存
                 }
             }
         }
