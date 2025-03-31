@@ -46,18 +46,16 @@ struct ChatView: View {
                             .imageScale(.large)
                     }
                     .confirmationDialog("个人设置", isPresented: $showingProfileMenu, titleVisibility: .visible) {
+                        Button("主题切换") {
+                            showingThemeSettings = true
+                        }
                         Button("修改个人资料") {
                             showingProfileEdit = true
                         }
-                        
-                        Button("外观设置") {
-                            showingThemeSettings = true
-                        }
-                        
                         Button("退出登录", role: .destructive, action: {
                             authViewModel.logout()
                         })
-                        
+
                         Button("取消", role: .cancel, action: {})
                     }
                 }

@@ -7,7 +7,7 @@ struct ThemeSettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("外观设置")) {
+                Section(header: Text("主题切换")) {
                     Picker("显示模式", selection: $themeManager.currentThemeMode) {
                         ForEach(ThemeManager.ThemeMode.allCases, id: \.self) { mode in
                             Text(mode.rawValue).tag(mode)
@@ -70,7 +70,7 @@ struct ThemeSettingsView: View {
                     .padding(.vertical, 8)
                 }
             }
-            .navigationTitle("外观设置")
+            .navigationTitle("主题切换")
             .navigationBarItems(
                 leading: Button("返回") {
                     presentationMode.wrappedValue.dismiss()
