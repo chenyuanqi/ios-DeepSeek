@@ -2,45 +2,45 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var showPassword = false
-    @State private var showConfirmPassword = false
+    @EnvironmentObject var themeManager: ThemeManager
+    
+    @State private var isSecured: Bool = true
+    @State private var isConfirmSecured: Bool = true
     
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
-                    // 顶部Logo
+                VStack(spacing: 30) {
+                    // Logo部分
                     VStack(spacing: 12) {
-                        Image(systemName: "bolt.circle.fill")
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
                             .resizable()
+                            .scaledToFit()
                             .frame(width: 80, height: 80)
-                            .foregroundColor(.blue)
-                            .padding(.bottom, 10)
+                            .foregroundColor(Color("AdaptiveAccent"))
                         
-                        Text("DeepSeek AI")
+                        Text("DeepSeek")
                             .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(Color("AdaptiveText"))
                         
-                        Text(authViewModel.isRegistrationMode ? "创建账号，开启智能对话" : "欢迎回来")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
+                        Text(authViewModel.isRegistrationMode ? "创建账号，开始对话" : "欢迎回来")
+                            .font(.system(size: 18))
+                            .foregroundColor(Color("AdaptiveSecondary"))
                     }
                     .padding(.top, 40)
-                    .padding(.bottom, 20)
                     
-                    // 错误信息
+                    // 错误消息
                     if let errorMessage = authViewModel.errorMessage {
                         Text(errorMessage)
-                            .font(.system(size: 14))
                             .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal)
-                            .padding(.bottom, 10)
-                            .multilineTextAlignment(.center)
                     }
                     
-                    // 注册/登录表单
-                    VStack(spacing: 16) {
-                        // 用户名 (仅注册时显示)
+                    // 表单部分
+                    VStack(spacing: 20) {
                         if authViewModel.isRegistrationMode {
+                            // 用户名字段（只在注册模式显示）
                             FormField(
                                 icon: "person.fill",
                                 placeholder: "用户名",
@@ -48,7 +48,7 @@ struct LoginView: View {
                             )
                         }
                         
-                        // 邮箱
+                        // 邮箱字段
                         FormField(
                             icon: "envelope.fill",
                             placeholder: "邮箱",
@@ -56,23 +56,23 @@ struct LoginView: View {
                             keyboardType: .emailAddress
                         )
                         
-                        // 密码
+                        // 密码字段
                         PasswordField(
                             placeholder: "密码",
                             text: $authViewModel.password,
-                            showPassword: $showPassword
+                            isSecured: $isSecured
                         )
                         
-                        // 确认密码 (仅注册时显示)
                         if authViewModel.isRegistrationMode {
+                            // 确认密码字段（只在注册模式显示）
                             PasswordField(
                                 placeholder: "确认密码",
                                 text: $authViewModel.confirmPassword,
-                                showPassword: $showConfirmPassword
+                                isSecured: $isConfirmSecured
                             )
                         }
                         
-                        // 提交按钮
+                        // 登录/注册按钮
                         Button(action: {
                             if authViewModel.isRegistrationMode {
                                 authViewModel.register()
@@ -92,34 +92,33 @@ struct LoginView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
+                            .background(Color("AdaptiveAccent"))
                             .foregroundColor(.white)
                             .cornerRadius(10)
                         }
                         .disabled(authViewModel.isLoading)
+                        
+                        // 切换注册/登录模式
+                        Button(action: {
+                            withAnimation {
+                                authViewModel.isRegistrationMode.toggle()
+                                authViewModel.resetForm()
+                            }
+                        }) {
+                            Text(authViewModel.isRegistrationMode ? "已有账号？点击登录" : "没有账号？点击注册")
+                                .foregroundColor(Color("AdaptiveAccent"))
+                        }
                     }
                     .padding(.horizontal)
-                    
-                    // 切换登录/注册
-                    Button(action: {
-                        authViewModel.toggleRegistrationMode()
-                    }) {
-                        Text(authViewModel.isRegistrationMode ? "已有账号？点击登录" : "没有账号？点击注册")
-                            .foregroundColor(.blue)
-                    }
-                    .padding(.top, 10)
-                    .disabled(authViewModel.isLoading)
-                    
-                    Spacer()
                 }
                 .padding()
             }
-            .background(Color(.systemBackground))
+            .background(Color("AdaptiveBackground").edgesIgnoringSafeArea(.all))
         }
     }
 }
 
-// 表单输入组件
+// 表单字段组件
 struct FormField: View {
     let icon: String
     let placeholder: String
@@ -129,8 +128,8 @@ struct FormField: View {
     var body: some View {
         HStack {
             Image(systemName: icon)
-                .foregroundColor(.gray)
-                .frame(width: 24)
+                .foregroundColor(Color("AdaptiveSecondary"))
+                .frame(width: 30)
             
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
@@ -138,50 +137,58 @@ struct FormField: View {
                 .disableAutocorrection(true)
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(10)
     }
 }
 
-// 密码输入组件
+// 密码字段组件
 struct PasswordField: View {
     let placeholder: String
     @Binding var text: String
-    @Binding var showPassword: Bool
+    @Binding var isSecured: Bool
     
     var body: some View {
         HStack {
             Image(systemName: "lock.fill")
-                .foregroundColor(.gray)
-                .frame(width: 24)
+                .foregroundColor(Color("AdaptiveSecondary"))
+                .frame(width: 30)
             
-            if showPassword {
-                TextField(placeholder, text: $text)
+            if isSecured {
+                SecureField(placeholder, text: $text)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
             } else {
-                SecureField(placeholder, text: $text)
+                TextField(placeholder, text: $text)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
             }
             
             Button(action: {
-                showPassword.toggle()
+                isSecured.toggle()
             }) {
-                Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
-                    .foregroundColor(.gray)
+                Image(systemName: isSecured ? "eye.slash" : "eye")
+                    .foregroundColor(Color("AdaptiveSecondary"))
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(10)
     }
 }
 
-// 预览
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
-        LoginView()
-            .environmentObject(AuthViewModel(previewMode: true))
+        Group {
+            LoginView()
+                .environmentObject(AuthViewModel(previewMode: true))
+                .environmentObject(ThemeManager())
+                .preferredColorScheme(.light)
+            
+            LoginView()
+                .environmentObject(AuthViewModel(previewMode: true))
+                .environmentObject(ThemeManager())
+                .preferredColorScheme(.dark)
+        }
     }
 } 

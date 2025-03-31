@@ -3,12 +3,15 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var themeManager: ThemeManager
     @State private var messageText = ""
     @State private var showingChatHistory = false
     @State private var isFirstAppearance = true
     @State private var previousMessageCount = 0
     @State private var showingProfileMenu = false
     @State private var showingProfileEdit = false
+    @State private var showingThemeSettings = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         NavigationView {
@@ -19,7 +22,7 @@ struct ChatView: View {
                         showingChatHistory = true
                     }) {
                         Image(systemName: "line.horizontal.3")
-                            .foregroundColor(.black)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                     }
                     
                     Spacer()
@@ -39,12 +42,16 @@ struct ChatView: View {
                         showingProfileMenu = true
                     }) {
                         Image(systemName: "person.crop.circle")
-                            .foregroundColor(.black)
+                            .foregroundColor(.primary)
                             .imageScale(.large)
                     }
                     .confirmationDialog("个人设置", isPresented: $showingProfileMenu, titleVisibility: .visible) {
                         Button("修改个人资料") {
                             showingProfileEdit = true
+                        }
+                        
+                        Button("外观设置") {
+                            showingThemeSettings = true
                         }
                         
                         Button("退出登录", role: .destructive, action: {
@@ -84,14 +91,16 @@ struct ChatView: View {
                                     if let username = authViewModel.currentUser?.username {
                                         Text("Hi~ \(username)，我是元气大宝")
                                             .font(.system(size: 24, weight: .medium))
+                                            .foregroundColor(colorScheme == .dark ? .white : .black)
                                     } else {
                                         Text("Hi~ 我是元气大宝")
                                             .font(.system(size: 24, weight: .medium))
+                                            .foregroundColor(colorScheme == .dark ? .white : .black)
                                     }
                                     
                                     Text("你身边的智能助手，可以为你答疑解惑、尽情创作，快来点击以下任一功能体验吧～")
                                         .font(.system(size: 16))
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                                 }
                                 .padding()
                                 
@@ -113,7 +122,7 @@ struct ChatView: View {
                                 HStack {
                                     Text("对话记录可以在侧边栏找到哦")
                                         .font(.system(size: 14))
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                                     Button("去看看") {
                                         showingChatHistory = true
                                     }
@@ -134,10 +143,10 @@ struct ChatView: View {
                                 if viewModel.isLoading && !viewModel.isStreaming {
                                     HStack {
                                         ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle())
+                                            .progressViewStyle(CircularProgressViewStyle(tint: colorScheme == .dark ? .white : .gray))
                                         Text(viewModel.thinkingPrompt)
                                             .font(.system(size: 14))
-                                            .foregroundColor(.gray)
+                                            .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                                             .padding(.leading, 8)
                                             .animation(.easeInOut, value: viewModel.thinkingPrompt)
                                         Spacer()
@@ -214,11 +223,11 @@ struct ChatView: View {
                             HStack {
                                 Text("RI • 深度思考")
                                     .font(.system(size: 14))
-                                    .foregroundColor(viewModel.isDeepThinkingEnabled ? .white : .black)
+                                    .foregroundColor(viewModel.isDeepThinkingEnabled ? .white : (colorScheme == .dark ? .white : .black))
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(viewModel.isDeepThinkingEnabled ? Color.blue : Color(.systemGray6))
+                            .background(viewModel.isDeepThinkingEnabled ? Color.blue : (colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6)))
                             .cornerRadius(16)
                         }
                         
@@ -235,10 +244,10 @@ struct ChatView: View {
                                 Text("新对话")
                             }
                             .font(.system(size: 14))
-                            .foregroundColor(.black)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(Color(.systemGray6))
+                            .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6))
                             .cornerRadius(16)
                         }
                         
@@ -258,7 +267,8 @@ struct ChatView: View {
                     HStack(spacing: 12) {
                         TextField("有问题尽管问我", text: $messageText)
                             .padding(10)
-                            .background(Color(.systemGray6))
+                            .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6))
+                            .foregroundColor(colorScheme == .dark ? .white : .primary)
                             .cornerRadius(18)
                             .disabled(viewModel.isLoading)
                         
@@ -282,6 +292,9 @@ struct ChatView: View {
             .sheet(isPresented: $showingProfileEdit) {
                 ProfileEditView()
                     .environmentObject(authViewModel)
+            }
+            .sheet(isPresented: $showingThemeSettings) {
+                ThemeSettingsView()
             }
         }
     }
@@ -309,6 +322,7 @@ struct MessageView: View {
     var isTyping: Bool = false
     @State private var cursorVisible = false
     @State private var currentTime = Date()
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         VStack(spacing: 4) {
@@ -337,7 +351,7 @@ struct MessageView: View {
                         // 如果正在输入中，显示打字光标
                         if isTyping {
                             Rectangle()
-                                .fill(Color.black)
+                                .fill(colorScheme == .dark ? Color.white : Color.black)
                                 .frame(width: 2, height: 16)
                                 .opacity(cursorVisible ? 1 : 0)
                                 .animation(Animation.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: cursorVisible)
@@ -347,8 +361,8 @@ struct MessageView: View {
                         }
                     }
                     .padding(12)
-                    .background(Color(.systemGray6))
-                    .foregroundColor(.black)
+                    .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
                     .cornerRadius(16)
                     .cornerRadius(4, corners: [.bottomLeft])
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
@@ -363,11 +377,11 @@ struct MessageView: View {
                     Spacer()
                     Text(formatTime(currentTime))
                         .font(.system(size: 10))
-                        .foregroundColor(.gray)
+                        .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                 } else {
                     Text(formatTime(currentTime))
                         .font(.system(size: 10))
-                        .foregroundColor(.gray)
+                        .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                     Spacer()
                 }
             }
@@ -405,6 +419,7 @@ struct RoundedCorner: Shape {
 
 // 问题按钮组件
 struct QuestionButton: View {
+    @Environment(\.colorScheme) var colorScheme
     let text: String
     let action: () -> Void
     
@@ -412,10 +427,10 @@ struct QuestionButton: View {
         Button(action: action) {
             Text(text)
                 .font(.system(size: 16))
-                .foregroundColor(.black)
+                .foregroundColor(colorScheme == .dark ? .white : .black)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
-                .background(Color(.systemGray6))
+                .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6))
                 .cornerRadius(8)
         }
     }
@@ -425,6 +440,7 @@ struct QuestionButton: View {
 struct ContextStrategyButton: View {
     @ObservedObject var viewModel: ChatViewModel
     @State private var showingStrategyMenu = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: {
@@ -440,8 +456,8 @@ struct ContextStrategyButton: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color(.systemGray6))
-            .foregroundColor(.primary)
+            .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6))
+            .foregroundColor(colorScheme == .dark ? .white : .primary)
             .cornerRadius(8)
         }
         .confirmationDialog("选择记忆策略", isPresented: $showingStrategyMenu, titleVisibility: .visible) {
@@ -467,5 +483,6 @@ struct ChatView_Previews: PreviewProvider {
     static var previews: some View {
         ChatView()
             .environmentObject(AuthViewModel(previewMode: true))
+            .environmentObject(ThemeManager())
     }
 } 

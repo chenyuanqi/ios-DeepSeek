@@ -5,6 +5,7 @@ struct ChatHistoryView: View {
     @Binding var isPresented: Bool
     @State private var searchText = ""
     @State private var expandedConversationId: UUID? = nil
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         VStack(spacing: 0) {
@@ -19,7 +20,7 @@ struct ChatHistoryView: View {
                     isPresented = false
                 }) {
                     Image(systemName: "xmark")
-                        .foregroundColor(.black)
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
                 }
             }
             .padding()
@@ -32,7 +33,7 @@ struct ChatHistoryView: View {
                     .font(.system(size: 16))
             }
             .padding(8)
-            .background(Color(.systemGray6))
+            .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6))
             .cornerRadius(8)
             .padding(.horizontal)
             
@@ -42,10 +43,10 @@ struct ChatHistoryView: View {
                     Spacer()
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 48))
-                        .foregroundColor(.gray)
+                        .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                     Text("暂无聊天记录")
                         .font(.system(size: 17))
-                        .foregroundColor(.gray)
+                        .foregroundColor(colorScheme == .dark ? .white : .gray)
                     Spacer()
                 }
             } else {
@@ -59,7 +60,7 @@ struct ChatHistoryView: View {
             // 今天的对话
             let todayConversations = filterTodayConversations()
             if !todayConversations.isEmpty {
-                Section(header: Text("今天").font(.system(size: 14)).foregroundColor(.gray)) {
+                Section(header: Text("今天").font(.system(size: 14)).foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)) {
                     ForEach(todayConversations) { conversation in
                         conversationRow(for: conversation)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -76,7 +77,7 @@ struct ChatHistoryView: View {
             // 昨天的对话
             let yesterdayConversations = filterYesterdayConversations()
             if !yesterdayConversations.isEmpty {
-                Section(header: Text("昨天").font(.system(size: 14)).foregroundColor(.gray)) {
+                Section(header: Text("昨天").font(.system(size: 14)).foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)) {
                     ForEach(yesterdayConversations) { conversation in
                         conversationRow(for: conversation)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -93,7 +94,7 @@ struct ChatHistoryView: View {
             // 更早的对话
             let earlierConversations = filterEarlierConversations()
             if !earlierConversations.isEmpty {
-                Section(header: Text("更早").font(.system(size: 14)).foregroundColor(.gray)) {
+                Section(header: Text("更早").font(.system(size: 14)).foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)) {
                     ForEach(earlierConversations) { conversation in
                         conversationRow(for: conversation)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -137,7 +138,7 @@ struct ChatHistoryView: View {
                         // 显示第一条用户消息内容作为标题（截断处理）
                         Text(getConversationTitle(conversation))
                             .font(.system(size: 16))
-                            .foregroundColor(.black)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                             .lineLimit(1)
                         
                         Spacer()
@@ -147,14 +148,14 @@ struct ChatHistoryView: View {
                     HStack {
                         Text(formatTime(conversation.date))
                             .font(.system(size: 12))
-                            .foregroundColor(.gray)
+                            .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                         
                         Spacer()
                         
                         // 显示消息数量
                         Text("\(conversation.messages.count)条消息")
                             .font(.system(size: 12))
-                            .foregroundColor(.gray)
+                            .foregroundColor(colorScheme == .dark ? Color(.systemGray4) : .gray)
                     }
                 }
                 .padding(.vertical, 8)
@@ -181,7 +182,7 @@ struct ChatHistoryView: View {
                                 
                                 Text(message.content)
                                     .font(.system(size: 14))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(colorScheme == .dark ? .white : .black)
                                     .lineLimit(2)
                             }
                         }
@@ -220,13 +221,13 @@ struct ChatHistoryView: View {
                             Spacer()
                         }
                         .padding(.vertical, 8)
-                        .background(Color(.systemGray6))
+                        .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
                         .cornerRadius(8)
                     }
                     .padding(.top, 4)
                 }
                 .padding(12)
-                .background(Color(.systemGray6))
+                .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6))
                 .cornerRadius(8)
                 .padding(.vertical, 8)
             }

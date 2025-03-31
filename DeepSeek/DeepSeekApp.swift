@@ -33,16 +33,28 @@ struct DeepSeekApp: App {
     // 注册AppDelegate
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
-    // 创建并注入视图模型
+    // 认证视图模型
     @StateObject private var authViewModel: AuthViewModel
     
+    // 主题管理器
+    @StateObject private var themeManager = ThemeManager()
+    
     init() {
+        // 配置网络请求和日志
+        print("🚀 应用启动: DeepSeek")
+        print("📱 系统版本: \(UIDevice.current.systemVersion)")
+        
+        #if DEBUG
+        print("🧪 当前为DEBUG模式")
+        #endif
+        
         // 检查是否使用模拟API
         #if DEBUG
-        let useMockAPI = AppConfiguration.useMockAPI
-        _authViewModel = StateObject(wrappedValue: AuthViewModel(previewMode: useMockAPI))
-        if useMockAPI {
+        if ProcessInfo.processInfo.environment["MOCK_API"] == "1" {
+            _authViewModel = StateObject(wrappedValue: AuthViewModel(previewMode: true))
             print("🧪 应用启动于模拟API模式")
+        } else {
+            _authViewModel = StateObject(wrappedValue: AuthViewModel())
         }
         #else
         _authViewModel = StateObject(wrappedValue: AuthViewModel())
@@ -54,40 +66,38 @@ struct DeepSeekApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
+                // 根据认证状态显示不同的视图
                 if authViewModel.isAuthenticated {
-                    // 用户已登录，显示聊天界面
                     ChatView()
                         .environmentObject(authViewModel)
                 } else {
-                    // 用户未登录，显示登录界面
                     LoginView()
                         .environmentObject(authViewModel)
                 }
             }
             .onAppear {
+                // 检查认证状态
                 authViewModel.checkAuthState()
             }
+            // 应用全局主题
+            .environmentObject(themeManager)
+            .preferredColorScheme(themeManager.colorScheme)
             #if DEBUG
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        AppConfiguration.toggleMockAPI()
-                        // 显示提示重新启动应用
-                        let alert = UIAlertController(
-                            title: "切换API模式", 
-                            message: "已切换\(AppConfiguration.useMockAPI ? "到模拟API" : "到真实API")模式，请重启应用使设置生效", 
-                            preferredStyle: .alert
-                        )
-                        alert.addAction(UIAlertAction(title: "确定", style: .default))
-                        
-                        // 获取当前窗口的根控制器（适用于iOS 15及以上版本）
-                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                           let rootController = windowScene.windows.first?.rootViewController {
-                            rootController.present(alert, animated: true)
+                    if !authViewModel.isAuthenticated {
+                        Button(action: {
+                            // 切换模拟API模式
+                            let newValue = !(ProcessInfo.processInfo.environment["MOCK_API"] == "1")
+                            setenv("MOCK_API", newValue ? "1" : "0", 1)
+                            // 添加延迟重启
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                exit(0)
+                            }
+                        }) {
+                            Image(systemName: "gear")
+                                .foregroundColor(.blue)
                         }
-                    }) {
-                        Image(systemName: "gear")
-                            .foregroundColor(.gray)
                     }
                 }
             }
