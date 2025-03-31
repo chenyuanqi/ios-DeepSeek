@@ -25,7 +25,7 @@ class AuthViewModel: ObservableObject {
     
     init() {
         self.apiService = UserAPIService()
-        checkAuthState()
+        // 移除自动检查，改为由ContentView控制
     }
     
     // 预览专用初始化方法
@@ -35,7 +35,7 @@ class AuthViewModel: ObservableObject {
             self.apiService = UserAPIService(mockMode: true)
         } else {
             self.apiService = UserAPIService()
-            checkAuthState()
+            // 移除自动检查，改为由ContentView控制
         }
     }
     
