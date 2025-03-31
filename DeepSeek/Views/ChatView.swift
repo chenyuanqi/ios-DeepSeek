@@ -1,4 +1,95 @@
 import SwiftUI
+import MarkdownUI
+
+// 自定义Markdown主题
+extension Theme {
+    static var deepSeekTheme: Theme {
+        Theme()
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(.em(0.85))
+                BackgroundColor(Color(.systemGray6).opacity(0.5))
+                ForegroundColor(.primary)
+            }
+            .codeBlock { configuration in
+                configuration
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6).opacity(0.5))
+                    .cornerRadius(8)
+                    .markdownMargin(top: 4, bottom: 8)
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(.em(0.85))
+                    }
+            }
+            .heading1 { configuration in
+                configuration
+                    .markdownMargin(top: 20, bottom: 10)
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(.em(1.6))
+                    }
+            }
+            .heading2 { configuration in
+                configuration
+                    .markdownMargin(top: 16, bottom: 8)
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(.em(1.4))
+                    }
+            }
+            .heading3 { configuration in
+                configuration
+                    .markdownMargin(top: 12, bottom: 6)
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(.em(1.2))
+                    }
+            }
+            .blockquote { configuration in
+                configuration
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .overlay(
+                        Rectangle()
+                            .fill(Color.blue.opacity(0.4))
+                            .frame(width: 4)
+                        ,
+                        alignment: .leading
+                    )
+                    .cornerRadius(6)
+            }
+            .table { configuration in
+                configuration
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 8)
+                    .markdownMargin(top: 0, bottom: 20)
+            }
+            .strong {
+                FontWeight(.bold)
+                ForegroundColor(.primary.opacity(0.9))
+            }
+            .emphasis {
+                FontStyle(.italic)
+            }
+            .link {
+                ForegroundColor(.blue)
+                UnderlineStyle(.single)
+            }
+            .listItem { configuration in
+                configuration
+                    .markdownMargin(top: 0, bottom: 0)
+            }
+            .taskListMarker { configuration in
+                Image(systemName: configuration.isCompleted ? "checkmark.square.fill" : "square")
+                    .foregroundColor(configuration.isCompleted ? .green : .primary)
+                    .imageScale(.small)
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+            }
+    }
+}
 
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
@@ -321,6 +412,8 @@ struct MessageView: View {
     @State private var cursorVisible = false
     @State private var currentTime = Date()
     @Environment(\.colorScheme) var colorScheme
+    // 添加处理自动链接的状态
+    @State private var detectedLinks: [URL] = []
     
     var body: some View {
         VStack(spacing: 4) {
@@ -337,12 +430,31 @@ struct MessageView: View {
                 } else {
                     HStack(alignment: .bottom, spacing: 0) {
                         // 处理消息内容，确保没有前导空行
-                        let processedContent = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let processedContent = processMessageContent(message.content)
                         
                         if processedContent.isEmpty && isTyping {
                             Text(" ") // 空内容但正在输入时显示一个空格，以显示光标
                         } else {
-                            Text(processedContent)
+                            // 使用自定义主题的Markdown视图
+                            Markdown(processedContent)
+                                .markdownTheme(.deepSeekTheme)
+                                .markdownTextStyle {
+                                    // 根据深色模式调整文本颜色
+                                    ForegroundColor(colorScheme == .dark ? .white : .black)
+                                    BackgroundColor(nil) // 移除背景色，避免与气泡背景冲突
+                                }
+                                // 根据深色模式定制代码块样式
+                                .markdownBlockStyle(\.codeBlock) { configuration in
+                                    configuration
+                                        .padding()
+                                        .background(colorScheme == .dark ? Color(.systemGray5) : Color(.systemGray6).opacity(0.5))
+                                        .cornerRadius(8)
+                                        .markdownTextStyle {
+                                            FontFamilyVariant(.monospaced)
+                                            FontSize(.em(0.85))
+                                            ForegroundColor(colorScheme == .dark ? .white : .black)
+                                        }
+                                }
                                 .animation(.easeIn(duration: 0.1), value: processedContent) // 为内容变化添加轻微动画
                         }
                         
@@ -360,7 +472,6 @@ struct MessageView: View {
                     }
                     .padding(12)
                     .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
-                    .foregroundColor(colorScheme == .dark ? .white : .black)
                     .cornerRadius(16)
                     .cornerRadius(4, corners: [.bottomLeft])
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
@@ -388,7 +499,47 @@ struct MessageView: View {
         .onAppear {
             // 使用当前时间，而不是消息的时间
             currentTime = Date()
+            // 检测纯文本中的URL链接
+            if !message.isUser {
+                detectLinks(in: message.content)
+            }
         }
+    }
+    
+    // 处理消息内容，确保合适的Markdown格式
+    private func processMessageContent(_ content: String) -> String {
+        var processedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 如果有检测到的URL链接但没有Markdown格式，自动转换为链接格式
+        if !processedContent.contains("[") && !processedContent.contains("](") {
+            for url in detectedLinks {
+                let urlString = url.absoluteString
+                if processedContent.contains(urlString) {
+                    // 避免重复替换已经处理过的链接
+                    if !processedContent.contains("[\(urlString)](\(urlString))") {
+                        processedContent = processedContent.replacingOccurrences(
+                            of: urlString,
+                            with: "[\(urlString)](\(urlString))"
+                        )
+                    }
+                }
+            }
+        }
+        
+        return processedContent
+    }
+    
+    // 检测文本中的URL链接
+    private func detectLinks(in text: String) {
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let matches = detector?.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
+        
+        detectedLinks = matches?.compactMap { match -> URL? in
+            if let url = match.url {
+                return url
+            }
+            return nil
+        } ?? []
     }
     
     private func formatTime(_ date: Date) -> String {

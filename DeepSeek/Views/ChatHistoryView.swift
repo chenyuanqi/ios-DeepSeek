@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 struct ChatHistoryView: View {
     @ObservedObject var viewModel: ChatViewModel
@@ -180,10 +181,22 @@ struct ChatHistoryView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(message.isUser ? .blue : .purple)
                                 
-                                Text(message.content)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(colorScheme == .dark ? .white : .black)
-                                    .lineLimit(2)
+                                if message.isUser {
+                                    Text(message.content)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                                        .lineLimit(2)
+                                } else {
+                                    // AI回复使用Markdown渲染，并使用自定义主题
+                                    Markdown(message.content)
+                                        .markdownTheme(.deepSeekTheme)
+                                        .markdownTextStyle {
+                                            FontSize(.em(0.85)) // 调整为适合预览的字体大小
+                                            ForegroundColor(colorScheme == .dark ? .white : .black)
+                                            BackgroundColor(nil) // 移除背景色
+                                        }
+                                        .lineLimit(2)
+                                }
                             }
                         }
                     }
