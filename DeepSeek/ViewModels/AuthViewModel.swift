@@ -133,7 +133,7 @@ class AuthViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    // 退出登录
+    // 退出登录zong
     func logout() {
         isLoading = true
         

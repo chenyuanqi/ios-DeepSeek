@@ -118,13 +118,14 @@ struct ChatView: View {
                     
                     Spacer()
                     
-                    HStack(spacing: 4) {
-                        Text("元气大宝")
-                            .font(.system(size: 17, weight: .medium))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 14))
-                            .foregroundColor(.gray)
-                    }
+                    // 隐藏中间标题
+                    // HStack(spacing: 4) {
+                    //     Text("元气大宝")
+                    //         .font(.system(size: 17, weight: .medium))
+                    //     Image(systemName: "chevron.down")
+                    //         .font(.system(size: 14))
+                    //         .foregroundColor(.gray)
+                    // }
                     
                     Spacer()
                     
@@ -320,8 +321,8 @@ struct ChatView: View {
                             .cornerRadius(16)
                         }
                         
-                        // 添加记忆策略按钮
-                        ContextStrategyButton(viewModel: viewModel)
+                        // 记忆策略按钮暂时隐藏
+                        // ContextStrategyButton(viewModel: viewModel)
                         
                         // 新建对话按钮 - 现在是第三个按钮
                         Button(action: {
