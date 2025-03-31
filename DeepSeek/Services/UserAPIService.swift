@@ -261,6 +261,97 @@ class UserAPIService {
             .eraseToAnyPublisher()
     }
     
+    // MARK: - 更新用户资料
+    func updateUserProfile(nickname: String) -> AnyPublisher<User, Error> {
+        // 如果是模拟模式，返回模拟数据
+        if isMockMode {
+            return mockUpdateUserProfile(nickname: nickname)
+        }
+        
+        // 构建请求URL
+        guard let url = URL(string: "\(baseURL)/user") else {
+            return Fail(error: AuthError.unknown).eraseToAnyPublisher()
+        }
+        
+        // 检查令牌
+        guard let token = UserDefaults.standard.string(forKey: "userToken") else {
+            return Fail(error: AuthError(message: "未登录，请先登录")).eraseToAnyPublisher()
+        }
+        
+        // 构建请求体
+        let requestData: [String: Any] = ["nickname": nickname]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
+            return Fail(error: AuthError.unknown).eraseToAnyPublisher()
+        }
+        
+        // 创建请求
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.httpBody = jsonData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        print("🔄 请求更新用户资料: \(url.absoluteString)")
+        
+        // 发送请求
+        return session.dataTaskPublisher(for: request)
+            .map { data, response -> Data in
+                print("🔄 收到响应状态码: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+                return data
+            }
+            .decode(type: APIResponse<UserData>.self, decoder: JSONDecoder())
+            .tryMap { response -> User in
+                print("✅ 资料更新成功: \(response.message)")
+                guard let userData = response.data else {
+                    throw AuthError(message: "服务器返回数据为空")
+                }
+                return userData.user
+            }
+            .mapError { error -> Error in
+                if let decodingError = error as? DecodingError {
+                    print("❌ 解析响应失败: \(decodingError)")
+                    return AuthError.unknown
+                } else if let apiError = error as? APIError {
+                    print("❌ API错误: \(apiError.localizedDescription)")
+                    return AuthError(message: apiError.localizedDescription)
+                } else if let urlError = error as? URLError {
+                    print("❌ 网络错误: \(urlError.localizedDescription)")
+                    return AuthError(message: "网络连接失败，请检查网络")
+                } else {
+                    print("❌ 未知错误: \(error.localizedDescription)")
+                    return error
+                }
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    // 模拟更新用户资料
+    private func mockUpdateUserProfile(nickname: String) -> AnyPublisher<User, Error> {
+        print("🔄 模拟更新用户资料")
+        
+        // 模拟延迟
+        return Future<User, Error> { promise in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                // 模拟更新用户
+                var mockUser = User.mockUser
+                mockUser = User(
+                    id: mockUser.id,
+                    email: mockUser.email,
+                    nickname: nickname,
+                    avatar: mockUser.avatar,
+                    signature: mockUser.signature,
+                    created_at: mockUser.created_at,
+                    updated_at: ISO8601DateFormatter().string(from: Date())
+                )
+                
+                print("✅ 模拟资料更新成功: \(nickname)")
+                promise(.success(mockUser))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+    
     // MARK: - 错误处理
     private func handleErrorResponse(data: Data, statusCode: Int) -> Error {
         do {
@@ -299,6 +390,11 @@ extension UserAPIService {
     
     // 用户响应
     struct UserResponse: Decodable {
+        let user: User
+    }
+    
+    // 用户数据响应
+    struct UserData: Decodable {
         let user: User
     }
 }

@@ -8,6 +8,7 @@ struct ChatView: View {
     @State private var isFirstAppearance = true
     @State private var previousMessageCount = 0
     @State private var showingProfileMenu = false
+    @State private var showingProfileEdit = false
     
     var body: some View {
         NavigationView {
@@ -42,6 +43,10 @@ struct ChatView: View {
                             .imageScale(.large)
                     }
                     .confirmationDialog("个人设置", isPresented: $showingProfileMenu, titleVisibility: .visible) {
+                        Button("修改个人资料") {
+                            showingProfileEdit = true
+                        }
+                        
                         Button("退出登录", role: .destructive, action: {
                             authViewModel.logout()
                         })
@@ -273,6 +278,10 @@ struct ChatView: View {
             }
             .sheet(isPresented: $showingChatHistory) {
                 ChatHistoryView(viewModel: viewModel, isPresented: $showingChatHistory)
+            }
+            .sheet(isPresented: $showingProfileEdit) {
+                ProfileEditView()
+                    .environmentObject(authViewModel)
             }
         }
     }

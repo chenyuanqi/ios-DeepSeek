@@ -216,4 +216,33 @@ class AuthViewModel: ObservableObject {
         isRegistrationMode.toggle()
         resetForm()
     }
+    
+    // 新增：更新用户资料
+    func updateUserProfile(nickname: String, completion: @escaping (Bool, String?) -> Void) {
+        isLoading = true
+        errorMessage = nil
+        
+        apiService.updateUserProfile(nickname: nickname)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] resultCompletion in
+                self?.isLoading = false
+                
+                if case .failure(let error) = resultCompletion {
+                    if let authError = error as? AuthError {
+                        self?.errorMessage = authError.errorDescription
+                        completion(false, authError.errorDescription)
+                    } else {
+                        self?.errorMessage = error.localizedDescription
+                        completion(false, error.localizedDescription)
+                    }
+                    print("❌ 更新资料失败: \(error.localizedDescription)")
+                }
+            }, receiveValue: { [weak self] user in
+                // 更新当前用户信息
+                self?.currentUser = user
+                print("✅ 资料更新成功: \(user.nickname)")
+                completion(true, "资料更新成功")
+            })
+            .store(in: &cancellables)
+    }
 } 
