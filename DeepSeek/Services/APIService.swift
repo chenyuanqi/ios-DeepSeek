@@ -709,6 +709,7 @@ class StreamPublisher: Publisher {
                     var chunkCount = 0
                     var contentChunkCount = 0
                     
+                    // 优化文本处理，以小块发送内容
                     for line in lines {
                         let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         
@@ -728,8 +729,24 @@ class StreamPublisher: Publisher {
                             
                             if let contentDelta = chunk.choices?.first?.delta?.content, !contentDelta.isEmpty {
                                 contentChunkCount += 1
-                                Swift.print("📝 发送内容块: \(contentDelta)")
-                                _ = self.subscriber?.receive(contentDelta)
+                                
+                                // 将内容按字符拆分，更细粒度地发送
+                                // 这样可以实现更明显的逐字显示效果
+                                if contentDelta.count > 1 {
+                                    for char in contentDelta {
+                                        // 让每个字符单独作为一个事件发送
+                                        _ = self.subscriber?.receive(String(char))
+                                        
+                                        // 添加微小延迟增强逐字显示效果
+                                        // 在实际场景中，网络延迟通常已经足够
+                                        usleep(500) // 0.5毫秒延迟
+                                    }
+                                    Swift.print("📝 发送拆分内容块: \(contentDelta)")
+                                } else {
+                                    // 单个字符直接发送
+                                    Swift.print("📝 发送内容块: \(contentDelta)")
+                                    _ = self.subscriber?.receive(contentDelta)
+                                }
                             }
                         } catch {
                             // 解析错误时跳过，但记录错误信息

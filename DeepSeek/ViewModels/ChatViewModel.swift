@@ -375,6 +375,11 @@ class ChatViewModel: ObservableObject {
                     
                     // 实时更新最后一条消息的内容
                     self.updateLastAIMessage(content: self.streamingText)
+                    
+                    // 添加轻微延迟，让视觉效果更自然
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                        // 空操作，只是为了触发UI更新
+                    }
                 }
             )
             .store(in: &cancellables)

@@ -415,6 +415,9 @@ struct MessageView: View {
     @Environment(\.colorScheme) var colorScheme
     // 添加处理自动链接的状态
     @State private var detectedLinks: [URL] = []
+    // 添加控制打字效果的状态
+    @State private var displayedContentIndex: Int = 0
+    @State private var timer: Timer? = nil
     
     var body: some View {
         VStack(spacing: 4) {
@@ -437,7 +440,7 @@ struct MessageView: View {
                             Text(" ") // 空内容但正在输入时显示一个空格，以显示光标
                         } else {
                             // 使用自定义主题的Markdown视图
-                            Markdown(processedContent)
+                            Markdown(isTyping ? visibleContent(from: processedContent) : processedContent)
                                 .markdownTheme(.deepSeekTheme)
                                 .markdownTextStyle {
                                     // 根据深色模式调整文本颜色
@@ -456,7 +459,7 @@ struct MessageView: View {
                                             ForegroundColor(colorScheme == .dark ? .white : .black)
                                         }
                                 }
-                                .animation(.easeIn(duration: 0.1), value: processedContent) // 为内容变化添加轻微动画
+                                .animation(.easeIn(duration: 0.05), value: isTyping ? visibleContent(from: processedContent) : processedContent) // 更短的动画时间
                         }
                         
                         // 如果正在输入中，显示打字光标
@@ -503,8 +506,51 @@ struct MessageView: View {
             // 检测纯文本中的URL链接
             if !message.isUser {
                 detectLinks(in: message.content)
+                
+                // 如果是AI消息且正在输入中，设置计时器实现打字机效果
+                if isTyping {
+                    displayedContentIndex = 0
+                    startTypewriterEffect()
+                }
             }
         }
+        .onChange(of: message.content) { newContent in
+            // 当消息内容更新时，如果是AI正在输入的消息，重置显示进度
+            if isTyping && !message.isUser {
+                startTypewriterEffect()
+            }
+        }
+        .onDisappear {
+            // 清理计时器
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+    
+    // 实现打字机效果的辅助方法
+    private func startTypewriterEffect() {
+        // 清理已有计时器
+        timer?.invalidate()
+        
+        // 重置显示索引
+        displayedContentIndex = min(displayedContentIndex, message.content.count)
+        
+        // 创建新的计时器
+        timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in
+            if displayedContentIndex < message.content.count {
+                displayedContentIndex += 1
+            } else {
+                timer?.invalidate()
+                timer = nil
+            }
+        }
+    }
+    
+    // 返回当前应显示的内容
+    private func visibleContent(from content: String) -> String {
+        let index = min(displayedContentIndex, content.count)
+        let visibleIndex = content.index(content.startIndex, offsetBy: index)
+        return String(content[..<visibleIndex])
     }
     
     // 处理消息内容，确保合适的Markdown格式
