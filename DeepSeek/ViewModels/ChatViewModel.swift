@@ -12,6 +12,8 @@ class ChatViewModel: ObservableObject {
     @Published var isDeepThinkingEnabled = false  // 是否启用深度思考模式
     @Published var thinkingPrompt: String = "正在思考..." // 思考提示文本
     @Published var featureNotAvailableMessage: String? // 功能未开发提示
+    @Published var dailyMessageCount: Int = 0 // 每日消息计数
+    @Published var limitReached: Bool = false // 是否达到免费使用限制
     
     private let apiService = APIService()
     private var cancellables = Set<AnyCancellable>()
@@ -38,6 +40,9 @@ class ChatViewModel: ObservableObject {
         "这是个有深度的问题，我的看法是..."
     ]
     
+    // 免费用户每日使用限制
+    private let freeUserDailyLimit = 10
+    
     init() {
         loadConversations()
         
@@ -45,6 +50,9 @@ class ChatViewModel: ObservableObject {
         if currentConversation == nil {
             startNewConversation()
         }
+        
+        // 加载每日消息计数
+        loadDailyMessageCount()
     }
     
     // 切换深度思考模式
@@ -257,7 +265,28 @@ class ChatViewModel: ObservableObject {
     }
     
     // 修改：发送消息方法，使用对话上下文
-    func sendMessage(_ content: String) {
+    func sendMessage(_ content: String, membershipViewModel: MembershipViewModel? = nil) {
+        // 检查是否需要限制非会员用户
+        if let membershipViewModel = membershipViewModel, !membershipViewModel.isMember {
+            // 更新每日计数
+            dailyMessageCount += 1
+            saveDailyMessageCount()
+            
+            // 检查是否达到限制
+            if dailyMessageCount > freeUserDailyLimit {
+                limitReached = true
+                featureNotAvailableMessage = "您已达到今日免费使用次数限制，请订阅会员继续使用"
+                // 3秒后自动清除提示
+                messageTimer?.invalidate()
+                messageTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        self?.featureNotAvailableMessage = nil
+                    }
+                }
+                return
+            }
+        }
+        
         print("📱 用户发送消息: \(content)")
         
         // 创建并添加用户消息
@@ -490,6 +519,35 @@ class ChatViewModel: ObservableObject {
                 self?.featureNotAvailableMessage = nil
             }
         }
+    }
+    
+    // 加载每日消息计数
+    private func loadDailyMessageCount() {
+        // 获取当前日期字符串
+        let today = formatDate(Date())
+        let savedDate = UserDefaults.standard.string(forKey: "lastMessageCountDate") ?? ""
+        
+        if today == savedDate {
+            // 如果是同一天，读取保存的计数
+            dailyMessageCount = UserDefaults.standard.integer(forKey: "dailyMessageCount")
+        } else {
+            // 如果是新的一天，重置计数
+            dailyMessageCount = 0
+            saveDailyMessageCount()
+        }
+    }
+    
+    // 保存每日消息计数
+    private func saveDailyMessageCount() {
+        UserDefaults.standard.set(dailyMessageCount, forKey: "dailyMessageCount")
+        UserDefaults.standard.set(formatDate(Date()), forKey: "lastMessageCountDate")
+    }
+    
+    // 格式化日期
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
     
     deinit {

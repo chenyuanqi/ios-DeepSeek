@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0D22B18B2D9AD88F002EF242 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0D22B18A2D9AD88F002EF242 /* MarkdownUI */; };
+		0DA110742D9C271C002A7B7E /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0DA110732D9C271C002A7B7E /* StoreKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,6 +29,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0DA110732D9C271C002A7B7E /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		0DA652C72D9951C1003194CE /* DeepSeek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeepSeek.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0DA652D82D9951C3003194CE /* DeepSeekTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0DA652E22D9951C3003194CE /* DeepSeekUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -57,6 +59,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0D22B18B2D9AD88F002EF242 /* MarkdownUI in Frameworks */,
+				0DA110742D9C271C002A7B7E /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -80,6 +83,7 @@
 		0D22B1892D9AD88F002EF242 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				0DA110732D9C271C002A7B7E /* StoreKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

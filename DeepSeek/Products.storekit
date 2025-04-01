@@ -1,0 +1,128 @@
+{
+  "identifier" : "79654ACE",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "com.yourcompany.DeepSeek",
+    "_developerTeamID" : "YOUR_TEAM_ID",
+    "_lastSynchronizedDate" : 699906152.53204501
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "20A54BAE",
+      "localizations" : [
+        {
+          "description" : "解锁DeepSeek全部高级功能",
+          "displayName" : "DeepSeek会员",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "Unlock all premium features",
+          "displayName" : "DeepSeek Membership",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "DeepSeek Memberships",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "28",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "47F5CD09",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "每月自动续期",
+              "displayName" : "月度会员",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Auto-renews monthly",
+              "displayName" : "Monthly Membership",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.deepseek.app.subscription.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Monthly Membership",
+          "subscriptionGroupID" : "20A54BAE",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "78",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "B2CA9F32",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "每季度自动续期",
+              "displayName" : "季度会员",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Auto-renews quarterly",
+              "displayName" : "Quarterly Membership",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.deepseek.app.subscription.quarterly",
+          "recurringSubscriptionPeriod" : "P3M",
+          "referenceName" : "Quarterly Membership",
+          "subscriptionGroupID" : "20A54BAE",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "238",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "F03B612A",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "每年自动续期",
+              "displayName" : "年度会员",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Auto-renews yearly",
+              "displayName" : "Yearly Membership",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.deepseek.app.subscription.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Yearly Membership",
+          "subscriptionGroupID" : "20A54BAE",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 2,
+    "minor" : 0
+  }
+} 

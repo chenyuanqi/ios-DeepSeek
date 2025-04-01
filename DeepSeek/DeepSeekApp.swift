@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import StoreKit
 
 // 添加AppConfiguration
 struct AppConfiguration {
@@ -35,6 +36,9 @@ struct DeepSeekApp: App {
     
     // 认证视图模型
     @StateObject private var authViewModel: AuthViewModel
+    
+    // 会员视图模型
+    @StateObject private var membershipViewModel = MembershipViewModel()
     
     // 主题管理器
     @StateObject private var themeManager = ThemeManager()
@@ -69,6 +73,7 @@ struct DeepSeekApp: App {
             AppContentView()
                 .environmentObject(authViewModel)
                 .environmentObject(themeManager)
+                .environmentObject(membershipViewModel)
                 .preferredColorScheme(themeManager.colorScheme)
                 #if DEBUG
                 .toolbar {
@@ -91,6 +96,7 @@ struct DeepSeekApp: App {
                 }
                 #endif
         }
+        .defaultAppStorage(UserDefaults.standard)
     }
 }
 

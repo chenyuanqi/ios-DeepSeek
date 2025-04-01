@@ -95,6 +95,7 @@ struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var membershipViewModel: MembershipViewModel
     @State private var messageText = ""
     @State private var showingChatHistory = false
     @State private var isFirstAppearance = true
@@ -102,6 +103,7 @@ struct ChatView: View {
     @State private var showingProfileMenu = false
     @State private var showingProfileEdit = false
     @State private var showingThemeSettings = false
+    @State private var showingMembership = false
     @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
@@ -118,14 +120,24 @@ struct ChatView: View {
                     
                     Spacer()
                     
-                    // 隐藏中间标题
-                    // HStack(spacing: 4) {
-                    //     Text("元气大宝")
-                    //         .font(.system(size: 17, weight: .medium))
-                    //     Image(systemName: "chevron.down")
-                    //         .font(.system(size: 14))
-                    //         .foregroundColor(.gray)
-                    // }
+                    // 会员标识
+                    if membershipViewModel.isMember {
+                        Button(action: {
+                            showingMembership = true
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "crown.fill")
+                                    .foregroundColor(.yellow)
+                                Text(membershipViewModel.currentPlan?.displayName ?? "会员")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.yellow.opacity(0.2))
+                            .cornerRadius(12)
+                        }
+                    }
                     
                     Spacer()
                     
@@ -138,12 +150,18 @@ struct ChatView: View {
                             .imageScale(.large)
                     }
                     .confirmationDialog("个人设置", isPresented: $showingProfileMenu, titleVisibility: .visible) {
+                        Button("会员订阅") {
+                            showingMembership = true
+                        }
+                        
                         Button("主题切换") {
                             showingThemeSettings = true
                         }
+                        
                         Button("修改个人资料") {
                             showingProfileEdit = true
                         }
+                        
                         Button("退出登录", role: .destructive, action: {
                             authViewModel.logout()
                         })
@@ -363,7 +381,7 @@ struct ChatView: View {
                             .disabled(viewModel.isLoading)
                         
                         Button(action: {
-                            sendMessage()
+                            sendMessage(messageText)
                         }) {
                             Image(systemName: "arrow.up.circle.fill")
                                 .resizable()
@@ -385,24 +403,39 @@ struct ChatView: View {
             }
             .sheet(isPresented: $showingThemeSettings) {
                 ThemeSettingsView()
+                    .environmentObject(themeManager)
+            }
+            .sheet(isPresented: $showingMembership) {
+                MembershipView()
+                    .environmentObject(themeManager)
+                    .environmentObject(authViewModel)
+            }
+        }
+        .onAppear {
+            // 检查会员状态
+            membershipViewModel.checkMembershipStatus()
+        }
+    }
+    
+    private func sendMessage(_ text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedText.isEmpty {
+            messageText = ""
+            // 传入会员状态
+            viewModel.sendMessage(trimmedText, membershipViewModel: membershipViewModel)
+            
+            // 如果达到限制，显示订阅提示
+            if viewModel.limitReached {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showingMembership = true
+                }
             }
         }
     }
     
-    private func sendMessage() {
-        guard !messageText.isEmpty && !viewModel.isLoading else { return }
-        
-        let message = messageText
-        messageText = ""
-        
-        viewModel.sendMessage(message)
-    }
-    
     private func sendSampleQuestion(_ question: String) {
-        guard !viewModel.isLoading else { return }
-        
         messageText = question
-        sendMessage()
+        sendMessage(question)
     }
 }
 
