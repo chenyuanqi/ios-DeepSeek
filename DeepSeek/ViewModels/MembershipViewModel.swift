@@ -9,6 +9,13 @@ class MembershipViewModel: ObservableObject {
     @Published var expirationDate: Date?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var selectedPaymentMethod: PaymentMethod = .inAppPurchase
+    
+    // 定义支付方式
+    enum PaymentMethod {
+        case inAppPurchase // 标准的应用内购买
+        case applePay      // Apple Pay支付
+    }
     
     // StoreKit管理器
     @Published var storeManager = StoreKitManager()
@@ -157,6 +164,11 @@ class MembershipViewModel: ObservableObject {
         // 然后从StoreKit更新最新状态
         Task {
             await storeManager.updatePurchasedProducts()
+            
+            // 验证App Store收据
+            let receiptValid = await storeManager.verifyReceipt()
+            print("📝 收据验证结果: \(receiptValid ? "有效" : "无效")")
+            
             DispatchQueue.main.async {
                 self.isLoading = false
             }
@@ -174,10 +186,36 @@ class MembershipViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        // 使用StoreKit进行真实购买
+        // 根据选择的支付方式处理
         Task {
             do {
-                if let _ = try await storeManager.purchase(product) {
+                var transaction: Transaction?
+                
+                // 使用选择的支付方式
+                switch selectedPaymentMethod {
+                case .inAppPurchase:
+                    // 使用标准StoreKit购买
+                    transaction = try await storeManager.purchase(product)
+                case .applePay:
+                    // 使用Apple Pay支付
+                    if storeManager.applePaySupported {
+                        transaction = try await storeManager.purchaseWithApplePay(product)
+                    } else {
+                        DispatchQueue.main.async {
+                            self.errorMessage = "您的设备不支持Apple Pay，请使用标准支付方式"
+                            self.isLoading = false
+                            completion(false)
+                        }
+                        return
+                    }
+                }
+                
+                // 处理交易结果
+                if transaction != nil {
+                    // 更新验证收据
+                    let receiptValid = await storeManager.verifyReceipt()
+                    print("📝 收据验证结果: \(receiptValid ? "有效" : "无效")")
+                    
                     DispatchQueue.main.async {
                         self.isLoading = false
                         completion(true)

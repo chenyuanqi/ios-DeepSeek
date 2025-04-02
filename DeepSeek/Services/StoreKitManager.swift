@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import PassKit // 添加PassKit用于支持Apple Pay
 
 class StoreKitManager: NSObject, ObservableObject {
     // 发布的属性用于UI更新
@@ -7,6 +8,7 @@ class StoreKitManager: NSObject, ObservableObject {
     @Published var purchasedProductIDs = Set<String>()
     @Published var isLoading = false
     @Published var error: String?
+    @Published var applePaySupported = false // 添加Apple Pay支持状态
     
     // 定义我们的产品ID
     // 注意：这些ID需要在App Store Connect中进行配置
@@ -27,6 +29,9 @@ class StoreKitManager: NSObject, ObservableObject {
         }
     }
     
+    // Apple Pay支付处理器
+    private var paymentController: PKPaymentAuthorizationController?
+    
     // 更新检查器
     private var updateListenerTask: Task<Void, Error>?
     
@@ -46,6 +51,21 @@ class StoreKitManager: NSObject, ObservableObject {
         Task {
             await updatePurchasedProducts()
         }
+        
+        // 检查Apple Pay是否可用
+        checkApplePaySupport()
+    }
+    
+    // 检查设备是否支持Apple Pay
+    private func checkApplePaySupport() {
+        applePaySupported = PKPaymentAuthorizationController.canMakePayments()
+        
+        // 检查是否能使用特定卡片类型
+        let supportedNetworks: [PKPaymentNetwork] = [.amex, .masterCard, .visa, .chinaUnionPay]
+        let canMakePaymentsWithCards = PKPaymentAuthorizationController.canMakePayments(usingNetworks: supportedNetworks)
+        
+        print("🍎 Apple Pay支持状态: \(applePaySupported)")
+        print("🍎 可使用银行卡支付: \(canMakePaymentsWithCards)")
     }
     
     // 监听交易更新
@@ -61,10 +81,33 @@ class StoreKitManager: NSObject, ObservableObject {
                     
                     // 完成交易
                     await transaction.finish()
+                    
+                    // 记录订阅信息
+                    await self.logSubscriptionInfo(for: transaction)
                 } catch {
                     print("交易验证失败: \(error)")
                 }
             }
+        }
+    }
+    
+    // 记录订阅详细信息
+    @MainActor
+    private func logSubscriptionInfo(for transaction: Transaction) async {
+        if let expirationDate = transaction.expirationDate {
+            print("✅ 订阅有效期至: \(expirationDate)")
+            
+            let remainingDays = Calendar.current.dateComponents([.day], from: Date(), to: expirationDate).day ?? 0
+            print("✅ 剩余天数: \(remainingDays)天")
+        }
+        
+        // 移除不存在的renewalInfo相关代码，改为简化版本
+        print("✅ 交易ID: \(transaction.id)")
+        print("✅ 购买日期: \(transaction.purchaseDate)")
+        
+        // 检查是否已撤销
+        if let revocationDate = transaction.revocationDate {
+            print("⚠️ 订阅已被撤销，撤销日期: \(revocationDate)")
         }
     }
     
@@ -221,6 +264,95 @@ class StoreKitManager: NSObject, ObservableObject {
         }
     }
     
+    // 使用Apple Pay购买
+    @MainActor
+    func purchaseWithApplePay(_ product: Product) async throws -> Transaction? {
+        // 确认设备支持Apple Pay
+        guard applePaySupported else {
+            self.error = "您的设备不支持Apple Pay"
+            return nil
+        }
+        
+        isLoading = true
+        error = nil
+        
+        // 创建支付请求
+        let paymentRequest = PKPaymentRequest()
+        paymentRequest.merchantIdentifier = "merchant.com.deepseek.app" // 替换为您的商户ID
+        paymentRequest.supportedNetworks = [.amex, .masterCard, .visa, .chinaUnionPay]
+        paymentRequest.merchantCapabilities = .capability3DS
+        paymentRequest.countryCode = "CN"
+        paymentRequest.currencyCode = "CNY"
+        
+        // 添加商品 - 使用基本初始化方法
+        // 使用Decimal类型获取价格，而不是直接访问product.price
+        let productPrice = NSDecimalNumber(decimal: product.price)
+        let productItem = PKPaymentSummaryItem(label: product.description, amount: productPrice)
+        
+        // 总计 - 使用基本初始化方法
+        let totalItem = PKPaymentSummaryItem(label: "DeepSeek AI", amount: productPrice)
+        
+        paymentRequest.paymentSummaryItems = [productItem, totalItem]
+        
+        // 创建支付处理器
+        paymentController = PKPaymentAuthorizationController(paymentRequest: paymentRequest)
+        
+        // 处理支付结果
+        let paymentSuccess = await withCheckedContinuation { continuation in
+            paymentController?.present { presented in
+                if !presented {
+                    print("❌ 无法显示Apple Pay界面")
+                    continuation.resume(returning: false)
+                }
+            }
+            
+            // 设置支付授权处理器
+            let delegate = ApplePayDelegate { success in
+                continuation.resume(returning: success)
+            }
+            self.paymentController?.delegate = delegate
+        }
+        
+        // 关闭支付界面
+        await paymentController?.dismiss()
+        
+        // 处理支付结果
+        if paymentSuccess {
+            // 尝试使用StoreKit购买产品
+            return try await purchase(product)
+        } else {
+            isLoading = false
+            self.error = "Apple Pay支付取消或失败"
+            return nil
+        }
+    }
+    
+    // Apple Pay支付代理
+    private class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
+        private let completionHandler: (Bool) -> Void
+        
+        init(completion: @escaping (Bool) -> Void) {
+            self.completionHandler = completion
+            super.init()
+        }
+        
+        func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController, 
+                                           didAuthorizePayment payment: PKPayment, 
+                                           handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
+            // 在这里处理支付令牌验证
+            // 可以将支付数据提交到您的服务器进行处理
+            print("🍎 Apple Pay支付已授权")
+            
+            // 如果支付验证成功
+            completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
+            self.completionHandler(true)
+        }
+        
+        func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
+            // 用户未完成支付 - 这里不做任何事，会在外层处理
+        }
+    }
+    
     // 恢复购买
     @MainActor
     func restorePurchases() async {
@@ -308,6 +440,48 @@ class StoreKitManager: NSObject, ObservableObject {
         return nil
     }
     
+    // 检查App Store收据有效性
+    func verifyReceipt() async -> Bool {
+        // 获取应用收据URL
+        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+            print("❌ 无法获取App Store收据URL")
+            return false
+        }
+        
+        // 检查收据是否存在
+        guard FileManager.default.fileExists(atPath: receiptURL.path) else {
+            print("❌ 收据文件不存在")
+            
+            // 尝试刷新收据
+            do {
+                try await AppStore.sync()
+                print("✅ 收据刷新成功")
+                // 刷新成功后再次检查
+                return await verifyReceipt()
+            } catch {
+                print("❌ 收据刷新失败: \(error.localizedDescription)")
+                return false
+            }
+        }
+        
+        do {
+            // 读取收据数据
+            let receiptData = try Data(contentsOf: receiptURL)
+            let receiptString = receiptData.base64EncodedString()
+            
+            print("✅ 成功读取收据数据，长度: \(receiptData.count)字节")
+            
+            // 在实际应用中，这里应该将收据发送到您的服务器
+            // 服务器将与Apple验证服务器通信，验证收据的有效性
+            // 这里简化处理，仅检查收据是否存在
+            
+            return receiptString.count > 0
+        } catch {
+            print("❌ 读取收据数据失败: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
     // 取消订阅
     func cancelSubscription() {
         // 无法直接通过代码取消订阅，需要引导用户去App Store设置中操作
@@ -325,6 +499,7 @@ class StoreKitManager: NSObject, ObservableObject {
 enum StoreError: Error {
     case failedVerification
     case unknown
+    case applePayNotSupported
     
     var description: String {
         switch self {
@@ -332,6 +507,8 @@ enum StoreError: Error {
             return "交易验证失败"
         case .unknown:
             return "未知错误"
+        case .applePayNotSupported:
+            return "设备不支持Apple Pay"
         }
     }
 } 

@@ -44,6 +44,9 @@ struct MembershipView: View {
                             // 套餐选择
                             plansView
                             
+                            // 支付方式选择
+                            paymentMethodView
+                            
                             // 订阅按钮
                             subscribeButton
                             
@@ -141,7 +144,7 @@ struct MembershipView: View {
                 .background(Color.yellow.opacity(0.2))
                 .clipShape(Circle())
             
-            Text("DeepSeek 会员")
+            Text("元气大宝VIP")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundColor(Color("AdaptiveText"))
             
@@ -339,6 +342,40 @@ struct MembershipView: View {
         }
     }
     
+    // 支付方式选择
+    private var paymentMethodView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("支付方式")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(Color("AdaptiveText"))
+            
+            HStack(spacing: 12) {
+                // 标准IAP支付
+                PaymentMethodCard(
+                    title: "App Store",
+                    icon: "creditcard",
+                    isSelected: viewModel.selectedPaymentMethod == .inAppPurchase,
+                    action: { viewModel.selectedPaymentMethod = .inAppPurchase }
+                )
+                
+                // Apple Pay支付
+                PaymentMethodCard(
+                    title: "Apple Pay",
+                    icon: "apple.logo",
+                    isSelected: viewModel.selectedPaymentMethod == .applePay,
+                    isDisabled: !viewModel.storeManager.applePaySupported,
+                    action: { 
+                        if viewModel.storeManager.applePaySupported {
+                            viewModel.selectedPaymentMethod = .applePay
+                        }
+                    }
+                )
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.top, 8)
+    }
+    
     // 订阅按钮
     private var subscribeButton: some View {
         Button(action: {
@@ -351,12 +388,18 @@ struct MembershipView: View {
                         .padding(.trailing, 5)
                 }
                 
-                Text("立即订阅")
-                    .fontWeight(.semibold)
+                // 根据选择的支付方式显示不同的按钮文字
+                if viewModel.selectedPaymentMethod == .applePay {
+                    Text("使用Apple Pay订阅")
+                        .fontWeight(.semibold)
+                } else {
+                    Text("立即订阅")
+                        .fontWeight(.semibold)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(Color.blue)
+            .background(viewModel.selectedPaymentMethod == .applePay ? Color.black : Color.blue)
             .foregroundColor(.white)
             .cornerRadius(10)
         }
@@ -623,6 +666,43 @@ struct PrivilegeRow: View {
             
             Spacer()
         }
+    }
+}
+
+// 添加支付方式选择卡片组件
+struct PaymentMethodCard: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    var isDisabled: Bool = false
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                    .foregroundColor(isSelected ? .white : (isDisabled ? .gray : Color("AdaptiveText")))
+                
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(isSelected ? .white : (isDisabled ? .gray : Color("AdaptiveText")))
+                
+                if isDisabled {
+                    Text("不可用")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.blue : Color("AdaptiveSecondaryBackground"))
+                    .opacity(isDisabled ? 0.5 : 1)
+            )
+        }
+        .disabled(isDisabled)
     }
 }
 
