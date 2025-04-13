@@ -11,6 +11,7 @@ struct MembershipView: View {
     @State private var showCancelConfirmation = false
     @State private var showRestoreAlert = false
     @State private var restoreSuccess = false
+    @State private var showNoRestoredPurchasesAlert = false
     
     var body: some View {
         NavigationView {
@@ -24,10 +25,10 @@ struct MembershipView: View {
                         memberInfoView
                     } else {
                         // StoreKit加载状态
-                        if viewModel.storeManager.products.isEmpty && viewModel.storeManager.isLoading {
+                        if viewModel.storeKitManager.products.isEmpty && viewModel.storeKitManager.isLoading {
                             // 加载中
                             loadingView
-                        } else if viewModel.storeManager.products.isEmpty && !viewModel.storeManager.error.isNilOrEmpty {
+                        } else if viewModel.storeKitManager.products.isEmpty && !viewModel.storeKitManager.error.isNilOrEmpty {
                             // 加载失败
                             storeErrorView
                         } else {
@@ -36,7 +37,7 @@ struct MembershipView: View {
                             
                             // 开发模式提示
                             #if DEBUG
-                            if viewModel.storeManager.products.isEmpty {
+                            if viewModel.storeKitManager.products.isEmpty {
                                 developmentModeNotice
                             }
                             #endif
@@ -100,6 +101,11 @@ struct MembershipView: View {
                 } else {
                     Text("未找到可恢复的购买")
                 }
+            }
+            .alert("无购买记录", isPresented: $showNoRestoredPurchasesAlert) {
+                Button("确定", role: .cancel) { }
+            } message: {
+                Text("您没有可恢复的购买记录")
             }
             .onAppear {
                 viewModel.checkMembershipStatus()
@@ -190,7 +196,7 @@ struct MembershipView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundColor(Color("AdaptiveText"))
             
-            if let error = viewModel.storeManager.error {
+            if let error = viewModel.storeKitManager.error {
                 Text(error)
                     .font(.system(size: 14))
                     .foregroundColor(Color("AdaptiveSecondary"))
@@ -200,7 +206,7 @@ struct MembershipView: View {
             
             Button(action: {
                 Task {
-                    await viewModel.storeManager.loadProducts()
+                    await viewModel.storeKitManager.loadProducts()
                 }
             }) {
                 Text("重试")
@@ -305,7 +311,7 @@ struct MembershipView: View {
                 .foregroundColor(Color("AdaptiveText"))
             
             // 使用StoreKit产品
-            if viewModel.storeManager.products.isEmpty {
+            if viewModel.storeKitManager.products.isEmpty {
                 // 如果没有StoreKit产品，使用模拟产品
                 VStack(spacing: 8) {
                     MockPlanCard(
@@ -328,7 +334,7 @@ struct MembershipView: View {
                 }
             } else {
                 // 使用真实StoreKit产品
-                ForEach(viewModel.storeManager.products, id: \.id) { product in
+                ForEach(viewModel.storeKitManager.products, id: \.id) { product in
                     if let plan = MembershipViewModel.MembershipPlan.fromProductID(product.id) {
                         StoreProductView(
                             product: product,
@@ -358,14 +364,14 @@ struct MembershipView: View {
                     action: { viewModel.selectedPaymentMethod = .inAppPurchase }
                 )
                 
-                // Apple Pay支付
+                // Apple Pay支付 - 不再在模拟器中隐藏
                 PaymentMethodCard(
                     title: "Apple Pay",
                     icon: "apple.logo",
                     isSelected: viewModel.selectedPaymentMethod == .applePay,
-                    isDisabled: !viewModel.storeManager.applePaySupported,
+                    isDisabled: !viewModel.storeKitManager.applePaySupported,
                     action: { 
-                        if viewModel.storeManager.applePaySupported {
+                        if viewModel.storeKitManager.applePaySupported {
                             viewModel.selectedPaymentMethod = .applePay
                         }
                     }
@@ -374,6 +380,15 @@ struct MembershipView: View {
             .frame(maxWidth: .infinity)
         }
         .padding(.top, 8)
+    }
+    
+    // 判断是否在模拟器中运行
+    private func isRunningInSimulator() -> Bool {
+        #if targetEnvironment(simulator)
+            return true
+        #else
+            return false
+        #endif
     }
     
     // 订阅按钮
@@ -434,7 +449,7 @@ struct MembershipView: View {
             
             #if DEBUG
             // 开发模式下的额外说明
-            if viewModel.storeManager.products.isEmpty {
+            if viewModel.storeKitManager.products.isEmpty {
                 Text("当前为开发模式，显示的价格为模拟数据")
                     .font(.system(size: 12))
                     .foregroundColor(.orange)
@@ -456,9 +471,15 @@ struct MembershipView: View {
     
     // 恢复购买操作
     private func restorePurchases() {
-        viewModel.restorePurchases { success in
-            restoreSuccess = success
-            showRestoreAlert = true
+        Task {
+            let success = await viewModel.restorePurchases()
+            if success {
+                // 恢复成功，viewModel已经处理了成功提示
+                print("📱 会员资格已成功恢复")
+            } else if !viewModel.showErrorAlert {
+                // 如果没有显示错误提示（可能是因为没有找到可恢复的购买），显示无购买记录提示
+                showNoRestoredPurchasesAlert = true
+            }
         }
     }
     

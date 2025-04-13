@@ -4,5 +4,9 @@
 <dict>
     <key>StoreKitConfigFile</key>
     <string>Products</string>
+    <key>NSMerchantIDs</key>
+    <array>
+        <string>merchant.com.chenyuanqi.DeepSeek</string>
+    </array>
 </dict>
 </plist> 

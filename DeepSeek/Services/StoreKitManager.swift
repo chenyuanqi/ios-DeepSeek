@@ -7,15 +7,16 @@ class StoreKitManager: NSObject, ObservableObject {
     @Published var products: [Product] = []
     @Published var purchasedProductIDs = Set<String>()
     @Published var isLoading = false
+    @Published var isRestoringPurchases = false
     @Published var error: String?
     @Published var applePaySupported = false // 添加Apple Pay支持状态
     
     // 定义我们的产品ID
     // 注意：这些ID需要在App Store Connect中进行配置
     enum ProductID: String, CaseIterable {
-        case monthlySubscription = "com.deepseek.app.subscription.monthly"
-        case quarterlySubscription = "com.deepseek.app.subscription.quarterly"
-        case yearlySubscription = "com.deepseek.app.subscription.yearly"
+        case monthlySubscription = "com.chenyuanqi.DeepSeek.subscription.monthly"
+        case quarterlySubscription = "com.chenyuanqi.DeepSeek.subscription.quarterly"
+        case yearlySubscription = "com.chenyuanqi.DeepSeek.subscription.yearly"
         
         var displayName: String {
             switch self {
@@ -273,31 +274,26 @@ class StoreKitManager: NSObject, ObservableObject {
             return nil
         }
         
+        // 不再跳过模拟器环境，尝试执行Apple Pay流程
         isLoading = true
         error = nil
         
         // 创建支付请求
         let paymentRequest = PKPaymentRequest()
-        paymentRequest.merchantIdentifier = "merchant.com.deepseek.app" // 替换为您的商户ID
+        paymentRequest.merchantIdentifier = "merchant.com.chenyuanqi.DeepSeek"
         paymentRequest.supportedNetworks = [.amex, .masterCard, .visa, .chinaUnionPay]
         paymentRequest.merchantCapabilities = .capability3DS
         paymentRequest.countryCode = "CN"
         paymentRequest.currencyCode = "CNY"
         
-        // 添加商品 - 使用基本初始化方法
-        // 使用Decimal类型获取价格，而不是直接访问product.price
         let productPrice = NSDecimalNumber(decimal: product.price)
         let productItem = PKPaymentSummaryItem(label: product.description, amount: productPrice)
-        
-        // 总计 - 使用基本初始化方法
         let totalItem = PKPaymentSummaryItem(label: "DeepSeek AI", amount: productPrice)
         
         paymentRequest.paymentSummaryItems = [productItem, totalItem]
         
-        // 创建支付处理器
         paymentController = PKPaymentAuthorizationController(paymentRequest: paymentRequest)
         
-        // 处理支付结果
         let paymentSuccess = await withCheckedContinuation { continuation in
             paymentController?.present { presented in
                 if !presented {
@@ -306,19 +302,16 @@ class StoreKitManager: NSObject, ObservableObject {
                 }
             }
             
-            // 设置支付授权处理器
             let delegate = ApplePayDelegate { success in
                 continuation.resume(returning: success)
             }
             self.paymentController?.delegate = delegate
         }
         
-        // 关闭支付界面
         await paymentController?.dismiss()
         
-        // 处理支付结果
         if paymentSuccess {
-            // 尝试使用StoreKit购买产品
+            // 支付授权成功后，尝试使用StoreKit购买
             return try await purchase(product)
         } else {
             isLoading = false
@@ -355,17 +348,50 @@ class StoreKitManager: NSObject, ObservableObject {
     
     // 恢复购买
     @MainActor
-    func restorePurchases() async {
-        isLoading = true
-        error = nil
+    func restorePurchases() async -> [Transaction] {
+        #if targetEnvironment(simulator)
+        isRestoringPurchases = true
+        print("🔍 模拟器环境: 模拟恢复购买")
         
-        print("🔄 开始恢复购买...")
+        // 尝试从UserDefaults中获取模拟购买数据
+        let savedPurchases = UserDefaults.standard.dictionary(forKey: "SimulatedPurchases") as? [String: [String: Any]] ?? [:]
         
-        // AppStore会自动知道用户已经购买了什么
-        await updatePurchasedProducts()
+        // 如果保存了模拟购买，则"恢复"它们
+        if !savedPurchases.isEmpty {
+            for (productID, _) in savedPurchases {
+                purchasedProductIDs.insert(productID)
+            }
+            print("✅ 模拟恢复购买成功，共\(savedPurchases.count)个产品")
+        }
         
-        print("✅ 购买恢复完成")
-        isLoading = false
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 模拟网络延迟
+        isRestoringPurchases = false
+        
+        // 返回空数组但非nil，表示成功恢复
+        return savedPurchases.isEmpty ? [] : [Transaction]()
+        #else
+        // 真实设备环境下的代码
+        isRestoringPurchases = true
+        
+        do {
+            var restoredTransactions: [Transaction] = []
+            
+            for await verification in Transaction.currentEntitlements {
+                if case .verified(let transaction) = verification {
+                    // 成功验证的交易
+                    handleVerifiedTransaction(transaction)
+                    restoredTransactions.append(transaction)
+                }
+            }
+            
+            isRestoringPurchases = false
+            return restoredTransactions
+        } catch {
+            isRestoringPurchases = false
+            print("❌ 恢复购买失败: \(error.localizedDescription)")
+            return []
+        }
+        #endif
     }
     
     // 检查交易是否通过了验证
@@ -442,6 +468,12 @@ class StoreKitManager: NSObject, ObservableObject {
     
     // 检查App Store收据有效性
     func verifyReceipt() async -> Bool {
+        #if targetEnvironment(simulator)
+        // 在模拟器中总是返回成功，避免收据检查引发的问题
+        print("⚠️ 模拟器环境：模拟收据验证成功")
+        return true
+        #else
+        // 真机环境正常验证收据
         // 获取应用收据URL
         guard let receiptURL = Bundle.main.appStoreReceiptURL else {
             print("❌ 无法获取App Store收据URL")
@@ -480,6 +512,7 @@ class StoreKitManager: NSObject, ObservableObject {
             print("❌ 读取收据数据失败: \(error.localizedDescription)")
             return false
         }
+        #endif
     }
     
     // 取消订阅
@@ -493,6 +526,58 @@ class StoreKitManager: NSObject, ObservableObject {
         // 取消后台任务
         updateListenerTask?.cancel()
     }
+    
+    /// 模拟购买（用于模拟器环境）
+    /// - Parameter productID: 要模拟购买的产品ID
+    /// - Returns: 模拟的交易（虽然是nil，但会激活相应的购买状态）
+    @MainActor
+    func simulatePurchase(for productID: ProductID) async -> Transaction? {
+        print("🔍 模拟购买产品: \(productID)")
+        isLoading = true
+        
+        // 延迟模拟网络请求
+        try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5秒延迟
+        
+        // 将产品添加到已购买列表
+        if !purchasedProductIDs.contains(productID.rawValue) {
+            purchasedProductIDs.insert(productID.rawValue)
+            
+            // 保存购买状态到UserDefaults
+            let purchaseDate = Date()
+            let expirationDate = Calendar.current.date(byAdding: .day, value: 30, to: purchaseDate)!
+            
+            let purchaseInfo: [String: Any] = [
+                "purchaseDate": purchaseDate,
+                "expirationDate": expirationDate,
+                "isActive": true
+            ]
+            
+            var savedPurchases = UserDefaults.standard.dictionary(forKey: "SimulatedPurchases") as? [String: [String: Any]] ?? [:]
+            savedPurchases[productID.rawValue] = purchaseInfo
+            UserDefaults.standard.set(savedPurchases, forKey: "SimulatedPurchases")
+            
+            // 发送通知
+            NotificationCenter.default.post(name: .purchaseCompleted, object: nil, userInfo: ["productID": productID.rawValue])
+        }
+        
+        isLoading = false
+        return nil // 返回nil，因为我们无法创建真实的Transaction对象
+    }
+    
+    // 处理已验证的交易
+    @MainActor
+    private func handleVerifiedTransaction(_ transaction: Transaction) {
+        // 将产品ID添加到已购买集合
+        purchasedProductIDs.insert(transaction.productID)
+        
+        // 记录交易信息
+        print("✅ 验证交易: \(transaction.id), 产品: \(transaction.productID)")
+        
+        // 记录订阅信息
+        Task {
+            await logSubscriptionInfo(for: transaction)
+        }
+    }
 }
 
 // 自定义错误类型
@@ -500,6 +585,7 @@ enum StoreError: Error {
     case failedVerification
     case unknown
     case applePayNotSupported
+    case noPurchasesToRestore
     
     var description: String {
         switch self {
@@ -509,6 +595,40 @@ enum StoreError: Error {
             return "未知错误"
         case .applePayNotSupported:
             return "设备不支持Apple Pay"
+        case .noPurchasesToRestore:
+            return "没有可恢复的购买"
         }
     }
+}
+
+#if DEBUG
+// 处理模拟器中的 Apple Pay 测试
+extension StoreKitManager {
+    // 在模拟器中模拟 Apple Pay 支付完成
+    @MainActor
+    func simulateApplePayCompletion(for product: Product) async -> Transaction? {
+        print("🔍 模拟器环境: 正在模拟 Apple Pay 支付")
+        do {
+            // 模拟器中直接使用 StoreKit 购买
+            return try await purchase(product)
+        } catch {
+            self.error = "模拟支付失败: \(error.localizedDescription)"
+            return nil
+        }
+    }
+    
+    // 判断是否在模拟器中运行
+    var isRunningInSimulator: Bool {
+        #if targetEnvironment(simulator)
+            return true
+        #else
+            return false
+        #endif
+    }
+}
+#endif
+
+// 通知中心扩展 - 购买相关通知
+extension Notification.Name {
+    static let purchaseCompleted = Notification.Name("com.deepseek.purchaseCompleted")
 } 

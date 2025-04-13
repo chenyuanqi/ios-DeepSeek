@@ -1,6 +1,28 @@
 import Foundation
 import Combine
 import StoreKit
+import PassKit // 添加PassKit用于Apple Pay支持
+
+// 会员错误类型定义
+enum MembershipError: Error, LocalizedError {
+    case productNotFound
+    case applePayNotSupported
+    case noPurchasesToRestore
+    case unknown
+    
+    var errorDescription: String? {
+        switch self {
+        case .productNotFound:
+            return "找不到对应的产品信息"
+        case .applePayNotSupported:
+            return "您的设备不支持Apple Pay，请使用标准支付方式"
+        case .noPurchasesToRestore:
+            return "没有可恢复的购买"
+        case .unknown:
+            return "未知错误"
+        }
+    }
+}
 
 class MembershipViewModel: ObservableObject {
     // 会员状态
@@ -11,23 +33,45 @@ class MembershipViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var selectedPaymentMethod: PaymentMethod = .inAppPurchase
     
+    // UI状态
+    @Published var isProcessingPurchase = false
+    @Published var purchaseSucceeded = false
+    @Published var showThankYouView = false
+    @Published var showErrorAlert = false
+    @Published var showRestoreSuccessAlert = false
+    @Published var selectedPlan: MembershipPlan = .monthly
+    @Published var subscribedPlan: MembershipPlan?
+    @Published var error: Error?
+    
+    // 计算属性 - 获取选中计划对应的产品
+    var productForSelectedPlan: Product? {
+        guard !storeKitManager.products.isEmpty else { return nil }
+        return storeKitManager.products.first { product in
+            return product.id == selectedPlan.productID.rawValue
+        }
+    }
+    
+    // StoreKit管理器
+    @Published var storeKitManager = StoreKitManager()
+    
     // 定义支付方式
     enum PaymentMethod {
         case inAppPurchase // 标准的应用内购买
         case applePay      // Apple Pay支付
     }
     
-    // StoreKit管理器
-    @Published var storeManager = StoreKitManager()
-    
     // 取消令牌存储
     private var cancellables = Set<AnyCancellable>()
     
     // 会员计划枚举
-    enum MembershipPlan: String, Codable, Hashable {
+    enum MembershipPlan: String, Codable, Hashable, CaseIterable {
         case monthly = "monthly"
         case quarterly = "quarterly"
         case yearly = "yearly"
+        
+        static var allCases: [MembershipPlan] {
+            return [.monthly, .quarterly, .yearly]
+        }
         
         var displayName: String {
             switch self {
@@ -104,7 +148,7 @@ class MembershipViewModel: ObservableObject {
     
     init() {
         // 观察StoreKit购买状态的变化
-        storeManager.$purchasedProductIDs
+        storeKitManager.$purchasedProductIDs
             .receive(on: RunLoop.main)
             .sink { [weak self] productIDs in
                 guard let self = self else { return }
@@ -121,7 +165,7 @@ class MembershipViewModel: ObservableObject {
                         
                         // 获取订阅到期日期
                         Task {
-                            if let expDate = await self.storeManager.getExpirationDate() {
+                            if let expDate = await self.storeKitManager.getExpirationDate() {
                                 DispatchQueue.main.async {
                                     self.expirationDate = expDate
                                     self.saveMembershipStatus()
@@ -141,7 +185,7 @@ class MembershipViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // 监听StoreKit错误
-        storeManager.$error
+        storeKitManager.$error
             .receive(on: RunLoop.main)
             .compactMap { $0 }
             .sink { [weak self] error in
@@ -163,10 +207,10 @@ class MembershipViewModel: ObservableObject {
         
         // 然后从StoreKit更新最新状态
         Task {
-            await storeManager.updatePurchasedProducts()
+            await storeKitManager.updatePurchasedProducts()
             
             // 验证App Store收据
-            let receiptValid = await storeManager.verifyReceipt()
+            let receiptValid = await storeKitManager.verifyReceipt()
             print("📝 收据验证结果: \(receiptValid ? "有效" : "无效")")
             
             DispatchQueue.main.async {
@@ -175,75 +219,131 @@ class MembershipViewModel: ObservableObject {
         }
     }
     
-    // 订阅会员
-    func subscribe(plan: MembershipPlan, completion: @escaping (Bool) -> Void) {
-        guard let product = storeManager.product(for: plan.productID) else {
-            errorMessage = "无法找到对应的产品信息"
-            completion(false)
-            return
-        }
+    @MainActor
+    func subscribe() async {
+        guard !isProcessingPurchase else { return }
+        isProcessingPurchase = true
         
-        isLoading = true
-        errorMessage = nil
-        
-        // 根据选择的支付方式处理
-        Task {
-            do {
-                var transaction: Transaction?
-                
-                // 使用选择的支付方式
-                switch selectedPaymentMethod {
-                case .inAppPurchase:
-                    // 使用标准StoreKit购买
-                    transaction = try await storeManager.purchase(product)
-                case .applePay:
-                    // 使用Apple Pay支付
-                    if storeManager.applePaySupported {
-                        transaction = try await storeManager.purchaseWithApplePay(product)
-                    } else {
-                        DispatchQueue.main.async {
-                            self.errorMessage = "您的设备不支持Apple Pay，请使用标准支付方式"
-                            self.isLoading = false
-                            completion(false)
-                        }
-                        return
-                    }
-                }
-                
-                // 处理交易结果
-                if transaction != nil {
-                    // 更新验证收据
-                    let receiptValid = await storeManager.verifyReceipt()
-                    print("📝 收据验证结果: \(receiptValid ? "有效" : "无效")")
-                    
-                    DispatchQueue.main.async {
-                        self.isLoading = false
-                        completion(true)
+        do {
+            guard let product = productForSelectedPlan else {
+                throw MembershipError.productNotFound
+            }
+            
+            #if targetEnvironment(simulator)
+            print("🔍 在模拟器环境中尝试购买")
+            switch selectedPaymentMethod {
+            case .inAppPurchase:
+                // 在模拟器中仍然使用标准StoreKit模拟购买（通过.storekit文件）
+                print("模拟器标准购买...")
+                _ = try await storeKitManager.purchase(product) // 使用标准购买触发.storekit流程
+                purchaseSucceeded = true
+            case .applePay:
+                // 检查是否可以使用Apple Pay
+                if PKPaymentAuthorizationController.canMakePayments() {
+                    // 在模拟器中尝试调用Apple Pay流程
+                    print("模拟器尝试Apple Pay...")
+                    let result = try await storeKitManager.purchaseWithApplePay(product)
+                    if result != nil {
+                        purchaseSucceeded = true
                     }
                 } else {
-                    // 用户取消购买或其他原因
-                    DispatchQueue.main.async {
-                        self.isLoading = false
-                        completion(false)
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.errorMessage = "购买失败: \(error.localizedDescription)"
-                    self.isLoading = false
-                    completion(false)
+                    throw MembershipError.applePayNotSupported
                 }
             }
+            #else
+            // 真实设备上的购买逻辑
+            switch selectedPaymentMethod {
+            case .inAppPurchase:
+                // 使用StoreKit进行购买
+                let result = try await storeKitManager.purchase(product)
+                if result != nil {
+                    purchaseSucceeded = true
+                }
+            case .applePay:
+                // 检查是否可以使用Apple Pay
+                if PKPaymentAuthorizationController.canMakePayments() {
+                    let result = try await storeKitManager.purchaseWithApplePay(product)
+                    if result != nil {
+                        purchaseSucceeded = true
+                    }
+                } else {
+                    throw MembershipError.applePayNotSupported
+                }
+            }
+            #endif
+            
+            if purchaseSucceeded {
+                print("✅ 购买成功：\(product.displayName)")
+                subscribedPlan = selectedPlan
+                showThankYouView = true
+            }
+        } catch {
+            print("❌ 购买失败：\(error.localizedDescription)")
+            self.error = error
+            showErrorAlert = true
         }
+        
+        isProcessingPurchase = false
     }
     
-    // 恢复购买
-    func restorePurchases(completion: @escaping (Bool) -> Void) {
-        Task {
-            await storeManager.restorePurchases()
-            DispatchQueue.main.async {
-                completion(self.storeManager.hasActiveSubscription())
+    @MainActor
+    func restorePurchases() async -> Bool {
+        guard !isProcessingPurchase else { return false }
+        isProcessingPurchase = true
+        
+        do {
+            #if targetEnvironment(simulator)
+            print("🔍 在模拟器环境中模拟恢复购买")
+            // 在模拟器中使用模拟恢复功能
+            let restoredTransactions = await storeKitManager.restorePurchases()
+            
+            if restoredTransactions.isEmpty {
+                throw MembershipError.noPurchasesToRestore
             }
+            
+            // 找到恢复的会员等级
+            for transaction in restoredTransactions {
+                if let plan = MembershipPlan.allCases.first(where: { $0.productID.rawValue == transaction.productID }) {
+                    subscribedPlan = plan
+                    break
+                }
+            }
+            
+            purchaseSucceeded = true
+            print("✅ 恢复购买成功")
+            #else
+            // 真实设备上的恢复购买逻辑
+            let restoredTransactions = try await storeKitManager.restorePurchases()
+            
+            if restoredTransactions.isEmpty {
+                throw MembershipError.noPurchasesToRestore
+            }
+            
+            // 找到恢复的会员等级
+            for transaction in restoredTransactions {
+                if let plan = MembershipPlan.allCases.first(where: { $0.productID.rawValue == transaction.productID }) {
+                    subscribedPlan = plan
+                    break
+                }
+            }
+            
+            purchaseSucceeded = true
+            print("✅ 恢复购买成功")
+            #endif
+            
+            if purchaseSucceeded {
+                showRestoreSuccessAlert = true
+            }
+            
+            isProcessingPurchase = false
+            return purchaseSucceeded
+        } catch {
+            print("❌ 恢复购买失败：\(error.localizedDescription)")
+            self.error = error
+            showErrorAlert = true
+            
+            isProcessingPurchase = false
+            return false
         }
     }
     
@@ -253,7 +353,7 @@ class MembershipViewModel: ObservableObject {
         errorMessage = nil
         
         // 在App内不能直接取消订阅，需要引导用户到App Store设置
-        storeManager.cancelSubscription()
+        storeKitManager.cancelSubscription()
         
         // 标记为已处理（虽然无法直接在应用内取消订阅）
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -312,10 +412,10 @@ class MembershipViewModel: ObservableObject {
         let localIsMember = UserDefaults.standard.bool(forKey: "isMember")
         
         // 如果StoreKit尚未初始化完成，先使用本地存储的状态
-        if !storeManager.hasActiveSubscription() && localIsMember && !isMembershipExpired() {
+        if !storeKitManager.hasActiveSubscription() && localIsMember && !isMembershipExpired() {
             isMember = true
         } else {
-            isMember = storeManager.hasActiveSubscription()
+            isMember = storeKitManager.hasActiveSubscription()
         }
         
         // 检查是否过期
@@ -334,5 +434,14 @@ class MembershipViewModel: ObservableObject {
         isMember = false
         currentPlan = nil
         expirationDate = nil
+    }
+    
+    // 订阅会员
+    func subscribe(plan: MembershipPlan, completion: @escaping (Bool) -> Void) {
+        selectedPlan = plan
+        Task {
+            await subscribe()
+            completion(purchaseSucceeded)
+        }
     }
 } 

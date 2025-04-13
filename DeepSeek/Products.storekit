@@ -7,8 +7,8 @@
 
   ],
   "settings" : {
-    "_applicationInternalID" : "com.yourcompany.DeepSeek",
-    "_developerTeamID" : "YOUR_TEAM_ID",
+    "_applicationInternalID" : "com.chenyuanqi.DeepSeek",
+    "_developerTeamID" : "YOUR_ACTUAL_TEAM_ID",
     "_lastSynchronizedDate" : 699906152.53204501
   },
   "subscriptionGroups" : [
@@ -52,7 +52,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.deepseek.app.subscription.monthly",
+          "productID" : "com.chenyuanqi.DeepSeek.subscription.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Monthly Membership",
           "subscriptionGroupID" : "20A54BAE",
@@ -82,7 +82,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.deepseek.app.subscription.quarterly",
+          "productID" : "com.chenyuanqi.DeepSeek.subscription.quarterly",
           "recurringSubscriptionPeriod" : "P3M",
           "referenceName" : "Quarterly Membership",
           "subscriptionGroupID" : "20A54BAE",
@@ -112,7 +112,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.deepseek.app.subscription.yearly",
+          "productID" : "com.chenyuanqi.DeepSeek.subscription.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Yearly Membership",
           "subscriptionGroupID" : "20A54BAE",
